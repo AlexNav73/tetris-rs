@@ -1,28 +1,73 @@
-use bevy::log::prelude::*;
-use bevy::prelude::*;
+use bevy::{color::palettes::css::*, prelude::*};
 
 const VCELL_COUNT: f32 = 21.0;
 const HCELL_COUNT: f32 = 10.0;
 const CELL_SIZE: f32 = 20.0;
 const BORDER_SIZE: f32 = 5.0;
-const SPEED: f32 = 40.0;
+const BITS_PER_CELL: usize = 3;
+const CELL_BIT_MASK: u32 = 0b111;
+
+const V_DIST_FROM_CENTER: f32 = VCELL_COUNT * CELL_SIZE / 2.0;
 
 fn main() {
     App::new()
         .init_resource::<GameState>()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, (spawn_camera, spawn_field))
+        .add_systems(
+            Startup,
+            (spawn_camera, spawn_field, spawn_initial_tetrimino),
+        )
         .add_systems(
             Update,
-            (handle_exit_key_pressed, spawn_tetrimino, tetrimino_fall),
+            (
+                handle_exit_key_pressed,
+                tetrimino_fall,
+                move_sideways,
+                show_tetrinino_debug_view,
+                update_speed,
+            ),
         )
-        .add_observer(on_tetrimino_stopped)
         .run();
 }
 
-#[derive(Resource, Default)]
+#[derive(Default)]
+struct Row(u32);
+
+impl Row {
+    fn set(&mut self, mask: u32) {
+        self.0 |= mask;
+    }
+
+    fn check(&self, mask: u32) -> bool {
+        (self.0 & mask) == 0
+    }
+}
+
+#[derive(Resource)]
 struct GameState {
-    rows: [u32; VCELL_COUNT as usize],
+    rows: [Row; VCELL_COUNT as usize],
+    speed: f32,
+}
+
+impl Default for GameState {
+    fn default() -> Self {
+        Self {
+            rows: [const { Row(0) }; VCELL_COUNT as usize],
+            speed: 50.0,
+        }
+    }
+}
+
+impl GameState {
+    fn set(&mut self, tetrimino: &Tetrimino) {
+        let row = &mut self.rows[tetrimino.row];
+        row.set(tetrimino.mask);
+
+        info!(
+            "idx = {}, row = {:b} tetrimino = {:b}",
+            tetrimino.row, row.0, tetrimino.mask
+        );
+    }
 }
 
 fn spawn_camera(mut commands: Commands) {
@@ -32,85 +77,194 @@ fn spawn_camera(mut commands: Commands) {
 #[derive(Clone, Copy, Component)]
 struct Active;
 
-#[derive(Clone, Copy, Component)]
-struct Tetrimino(u32);
+#[derive(Component)]
+struct Tetrimino {
+    mask: u32,
+    row: usize,
+    column: usize,
+}
 
-fn create_tetrimino(
+impl Tetrimino {
+    fn new() -> Self {
+        Self {
+            mask: CELL_BIT_MASK,
+            row: 0,
+            column: 9,
+        }
+    }
+
+    fn check(&self, row: &Row) -> bool {
+        row.check(self.mask)
+    }
+
+    fn move_left(&mut self, row: &Row) {
+        let new_mask = self.mask << BITS_PER_CELL;
+
+        if !row.check(new_mask) {
+            return;
+        }
+
+        if let Some(c) = self.column.checked_sub(1) {
+            self.column = c;
+            self.mask = new_mask;
+        }
+    }
+
+    fn move_right(&mut self, row: &Row) {
+        let new_mask = self.mask >> BITS_PER_CELL;
+
+        if !row.check(new_mask) {
+            return;
+        }
+
+        if self.column + 1 < HCELL_COUNT as usize {
+            self.column += 1;
+            self.mask = new_mask;
+        }
+    }
+}
+
+fn spawn_tetrimino(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    let v_dist_from_center = VCELL_COUNT * CELL_SIZE / 2.0;
-
-    let tetrimino = Tetrimino(123);
+    let tetrimino = Tetrimino::new();
 
     let vertical = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
     let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
 
-    commands.spawn((
-        tetrimino,
-        Active,
-        Mesh2d(vertical),
-        MeshMaterial2d(color),
-        Transform::from_xyz(0.0, v_dist_from_center - (CELL_SIZE / 2.0), 1.0),
-    ));
+    let x =
+        (tetrimino.column as f32 * CELL_SIZE) - (HCELL_COUNT * CELL_SIZE / 2.0) + (CELL_SIZE / 2.0);
+
+    commands
+        .spawn((
+            tetrimino,
+            Active,
+            Mesh2d(vertical),
+            MeshMaterial2d(color),
+            Transform::from_xyz(x, V_DIST_FROM_CENTER, 1.0),
+        ))
+        .observe(on_tetrimino_stopped);
 }
 
-fn spawn_tetrimino(
+fn spawn_initial_tetrimino(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    key: Res<ButtonInput<KeyCode>>,
 ) {
-    if key.just_pressed(KeyCode::KeyW) {
-        create_tetrimino(&mut commands, &mut meshes, &mut materials);
-    }
+    spawn_tetrimino(&mut commands, &mut meshes, &mut materials);
 }
 
 #[derive(Event)]
 struct TetriminoStopped;
 
 fn on_tetrimino_stopped(
-    _trigger: Trigger<TetriminoStopped>,
+    trigger: Trigger<TetriminoStopped>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    create_tetrimino(&mut commands, &mut meshes, &mut materials);
+    let entity = trigger.entity();
+
+    commands.entity(entity).remove::<Active>();
+
+    spawn_tetrimino(&mut commands, &mut meshes, &mut materials);
 }
 
 fn tetrimino_fall(
-    mut commans: Commands,
-    mut tetriminos: Query<(Entity, &mut Transform, &Tetrimino), With<Active>>,
-    game_state: Res<GameState>,
-    key: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut tetriminos: Query<(Entity, &mut Transform, &mut Tetrimino), With<Active>>,
+    mut game_state: ResMut<GameState>,
     time: Res<Time>,
 ) {
-    if !key.pressed(KeyCode::Space) {
+    if let Ok((entity, mut pos, mut tetrimino)) = tetriminos.get_single_mut() {
+        let height = VCELL_COUNT * CELL_SIZE;
+
+        let new_y = pos.translation.y - (time.delta_secs_f64() as f32 * game_state.speed);
+        let translated_y = new_y + V_DIST_FROM_CENTER;
+        let row_idx = ((height - translated_y) / CELL_SIZE).ceil() as usize;
+
+        let mut stop = false;
+        if row_idx < VCELL_COUNT as usize {
+            let row_to_check = &game_state.rows[row_idx];
+
+            if tetrimino.check(row_to_check) {
+                pos.translation = pos.translation.with_y(new_y);
+                tetrimino.row = row_idx;
+            } else {
+                stop = true;
+            }
+        } else {
+            stop = true;
+        };
+
+        if stop {
+            game_state.set(&tetrimino);
+            commands.trigger_targets(TetriminoStopped, entity);
+        }
+    }
+}
+
+fn move_sideways(
+    mut tetriminos: Query<(&mut Transform, &mut Tetrimino), With<Active>>,
+    key: Res<ButtonInput<KeyCode>>,
+    game_state: Res<GameState>,
+) {
+    if let Ok((mut pos, mut tetrimino)) = tetriminos.get_single_mut() {
+        let row = &game_state.rows[tetrimino.row];
+
+        if key.just_released(KeyCode::KeyA) {
+            tetrimino.move_left(row);
+        } else if key.just_pressed(KeyCode::KeyD) {
+            tetrimino.move_right(row);
+        }
+
+        if tetrimino.check(row) {
+            let column_to_check = tetrimino.column;
+            let new_x = (column_to_check as f32 * CELL_SIZE) - (HCELL_COUNT * CELL_SIZE / 2.0)
+                + CELL_SIZE / 2.0;
+            pos.translation = pos.translation.with_x(new_x);
+        }
+    }
+}
+
+fn show_tetrinino_debug_view(
+    tetriminos: Query<&Tetrimino, With<Active>>,
+    mut gizmos: Gizmos,
+    key: Res<ButtonInput<KeyCode>>,
+) {
+    if !key.pressed(KeyCode::KeyE) {
         return;
     }
 
-    if let Ok((entity, mut pos, tetrimino)) = tetriminos.get_single_mut() {
-        let v_dist_from_center = VCELL_COUNT * CELL_SIZE / 2.0;
-        let height = VCELL_COUNT * CELL_SIZE;
+    let tetrimino = tetriminos.single();
 
-        let translated_y = (pos.translation.y + CELL_SIZE / 2.0) + v_dist_from_center;
-        let row_idx = ((height - translated_y) / CELL_SIZE).ceil() as usize;
+    gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
-        info!("row_idx = {row_idx}");
+    gizmos.rect_2d(
+        Isometry2d::from_translation(Vec2::new(
+            (tetrimino.column as f32 * CELL_SIZE) - (HCELL_COUNT * CELL_SIZE / 2.0)
+                + (CELL_SIZE / 2.0),
+            (VCELL_COUNT * CELL_SIZE / 2.0) - (tetrimino.row as f32 * CELL_SIZE),
+        )),
+        Vec2::new(CELL_SIZE, CELL_SIZE),
+        Color::srgb(0.0, 0.0, 1.0),
+    );
 
-        if row_idx < VCELL_COUNT as usize {
-            let row_to_check = game_state.rows[row_idx];
+    gizmos.grid_2d(
+        Isometry2d::from_translation(Vec2::new(0.0, CELL_SIZE / 2.0)),
+        UVec2::new(HCELL_COUNT as u32, VCELL_COUNT as u32),
+        Vec2::new(CELL_SIZE, CELL_SIZE),
+        Color::srgb(0.2, 0.2, 0.2),
+    );
+}
 
-            if (row_to_check & tetrimino.0) == 0 {
-                let new_y = pos.translation.y - (time.delta_secs_f64() as f32 * SPEED);
-
-                pos.translation = pos.translation.with_y(new_y);
-            }
-        } else {
-            commans.entity(entity).remove::<Active>();
-            commans.trigger(TetriminoStopped);
-        }
+fn update_speed(key: Res<ButtonInput<KeyCode>>, mut game_state: ResMut<GameState>) {
+    if key.pressed(KeyCode::ArrowUp) {
+        game_state.speed += 3.0;
+    } else if key.pressed(KeyCode::ArrowDown) && game_state.speed - 3.0 > 0.0 {
+        game_state.speed -= 3.0;
     }
 }
 
@@ -123,7 +277,7 @@ fn spawn_field(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let h_dist_from_center = HCELL_COUNT * CELL_SIZE / 2.0;
-    let v_dist_from_center = VCELL_COUNT * CELL_SIZE / 2.0;
+    let v_dist_from_center = (VCELL_COUNT / 2.0).ceil() * CELL_SIZE;
     let border_center = BORDER_SIZE / 2.0;
 
     let vertical = meshes.add(Rectangle::new(BORDER_SIZE, VCELL_COUNT * CELL_SIZE));
@@ -138,14 +292,14 @@ fn spawn_field(
         Field,
         Mesh2d(vertical.clone()),
         MeshMaterial2d(color.clone()),
-        Transform::from_xyz(-h_dist_from_center - border_center, 0.0, 0.0),
+        Transform::from_xyz(-h_dist_from_center - border_center, CELL_SIZE / 2.0, 0.0),
     ));
     // right
     commans.spawn((
         Field,
         Mesh2d(vertical.clone()),
         MeshMaterial2d(color.clone()),
-        Transform::from_xyz(h_dist_from_center + border_center, 0.0, 0.0),
+        Transform::from_xyz(h_dist_from_center + border_center, CELL_SIZE / 2.0, 0.0),
     ));
     // top
     commans.spawn((
@@ -159,7 +313,11 @@ fn spawn_field(
         Field,
         Mesh2d(horizontal),
         MeshMaterial2d(color),
-        Transform::from_xyz(0.0, -v_dist_from_center - border_center, 0.0),
+        Transform::from_xyz(
+            0.0,
+            -((VCELL_COUNT * CELL_SIZE) - v_dist_from_center) - border_center,
+            0.0,
+        ),
     ));
 }
 
