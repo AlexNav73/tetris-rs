@@ -42,7 +42,7 @@ impl Row {
         self.0 |= mask;
     }
 
-    fn check(&self, mask: u32) -> bool {
+    fn can_move(&self, mask: u32) -> bool {
         (self.0 & mask) == 0
     }
 }
@@ -84,22 +84,30 @@ struct Tetrimino {
 }
 
 impl Tetrimino {
-    fn new() -> Self {
+    fn new(column: usize) -> Self {
         Self {
-            mask: CELL_BIT_MASK << 5,
+            mask: CELL_BIT_MASK << ((HCELL_COUNT as usize - column) * BITS_PER_CELL),
             row: 0,
-            column: 5,
+            column,
         }
     }
 
-    fn check(&self, row: &Row) -> bool {
-        row.check(self.mask)
+    fn can_move(&self, row: &Row) -> bool {
+        row.can_move(self.mask)
+    }
+
+    fn x(&self) -> f32 {
+        (self.column as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0) + CELL_CENTER
+    }
+
+    fn y(&self) -> f32 {
+        V_DIST_FROM_CENTER - (self.row as f32 * CELL_SIZE)
     }
 
     fn move_left(&mut self, row: &Row) {
         let new_mask = self.mask << BITS_PER_CELL;
 
-        if !row.check(new_mask) {
+        if !row.can_move(new_mask) {
             return;
         }
 
@@ -112,7 +120,7 @@ impl Tetrimino {
     fn move_right(&mut self, row: &Row) {
         let new_mask = self.mask >> BITS_PER_CELL;
 
-        if !row.check(new_mask) {
+        if !row.can_move(new_mask) {
             return;
         }
 
@@ -128,13 +136,12 @@ fn spawn_tetrimino(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    let tetrimino = Tetrimino::new();
+    let tetrimino = Tetrimino::new(5);
 
     let vertical = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
     let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
 
-    let x =
-        (tetrimino.column as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0) + CELL_CENTER;
+    let x = tetrimino.x();
 
     commands
         .spawn((
@@ -182,21 +189,21 @@ fn tetrimino_fall(
         let translated_y = new_y + V_DIST_FROM_CENTER;
         let row_idx = ((FIELD_HEIGHT - translated_y) / CELL_SIZE).ceil() as usize;
 
-        let mut stop = false;
+        let mut can_move_down = false;
         if row_idx < VCELL_COUNT as usize {
             let row_to_check = &game_state.rows[row_idx];
 
-            if tetrimino.check(row_to_check) {
+            if tetrimino.can_move(row_to_check) {
                 pos.translation.y = new_y;
                 tetrimino.row = row_idx;
-            } else {
-                stop = true;
+                can_move_down = true;
             }
-        } else {
-            stop = true;
-        };
+        }
 
-        if stop {
+        if !can_move_down {
+            tetrimino.row = row_idx - 1;
+            pos.translation.y = tetrimino.y();
+
             game_state.set(&tetrimino);
             commands.trigger_targets(TetriminoStopped, entity);
         }
@@ -217,11 +224,8 @@ fn move_sideways(
             tetrimino.move_right(row);
         }
 
-        if tetrimino.check(row) {
-            let column_to_check = tetrimino.column;
-            let new_x = (column_to_check as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0)
-                + CELL_CENTER;
-            pos.translation.x = new_x;
+        if tetrimino.can_move(row) {
+            pos.translation.x = tetrimino.x();
         }
     }
 }
@@ -240,11 +244,7 @@ fn show_tetrinino_debug_view(
     gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
     gizmos.rect_2d(
-        Isometry2d::from_translation(Vec2::new(
-            (tetrimino.column as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0)
-                + CELL_CENTER,
-            (FIELD_HEIGHT / 2.0) - (tetrimino.row as f32 * CELL_SIZE),
-        )),
+        Isometry2d::from_translation(Vec2::new(tetrimino.x(), tetrimino.y())),
         Vec2::new(CELL_SIZE, CELL_SIZE),
         Color::srgb(0.0, 0.0, 1.0),
     );
