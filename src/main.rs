@@ -7,7 +7,11 @@ const BORDER_SIZE: f32 = 5.0;
 const BITS_PER_CELL: usize = 3;
 const CELL_BIT_MASK: u32 = 0b111;
 
-const V_DIST_FROM_CENTER: f32 = VCELL_COUNT * CELL_SIZE / 2.0;
+const CELL_CENTER: f32 = CELL_SIZE / 2.0;
+const FIELD_WIDTH: f32 = HCELL_COUNT * CELL_SIZE;
+const FIELD_HEIGHT: f32 = VCELL_COUNT * CELL_SIZE;
+
+const V_DIST_FROM_CENTER: f32 = FIELD_HEIGHT / 2.0;
 
 fn main() {
     App::new()
@@ -62,11 +66,6 @@ impl GameState {
     fn set(&mut self, tetrimino: &Tetrimino) {
         let row = &mut self.rows[tetrimino.row];
         row.set(tetrimino.mask);
-
-        info!(
-            "idx = {}, row = {:b} tetrimino = {:b}",
-            tetrimino.row, row.0, tetrimino.mask
-        );
     }
 }
 
@@ -87,9 +86,9 @@ struct Tetrimino {
 impl Tetrimino {
     fn new() -> Self {
         Self {
-            mask: CELL_BIT_MASK,
+            mask: CELL_BIT_MASK << 5,
             row: 0,
-            column: 9,
+            column: 5,
         }
     }
 
@@ -135,7 +134,7 @@ fn spawn_tetrimino(
     let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
 
     let x =
-        (tetrimino.column as f32 * CELL_SIZE) - (HCELL_COUNT * CELL_SIZE / 2.0) + (CELL_SIZE / 2.0);
+        (tetrimino.column as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0) + CELL_CENTER;
 
     commands
         .spawn((
@@ -179,18 +178,16 @@ fn tetrimino_fall(
     time: Res<Time>,
 ) {
     if let Ok((entity, mut pos, mut tetrimino)) = tetriminos.get_single_mut() {
-        let height = VCELL_COUNT * CELL_SIZE;
-
         let new_y = pos.translation.y - (time.delta_secs_f64() as f32 * game_state.speed);
         let translated_y = new_y + V_DIST_FROM_CENTER;
-        let row_idx = ((height - translated_y) / CELL_SIZE).ceil() as usize;
+        let row_idx = ((FIELD_HEIGHT - translated_y) / CELL_SIZE).ceil() as usize;
 
         let mut stop = false;
         if row_idx < VCELL_COUNT as usize {
             let row_to_check = &game_state.rows[row_idx];
 
             if tetrimino.check(row_to_check) {
-                pos.translation = pos.translation.with_y(new_y);
+                pos.translation.y = new_y;
                 tetrimino.row = row_idx;
             } else {
                 stop = true;
@@ -222,9 +219,9 @@ fn move_sideways(
 
         if tetrimino.check(row) {
             let column_to_check = tetrimino.column;
-            let new_x = (column_to_check as f32 * CELL_SIZE) - (HCELL_COUNT * CELL_SIZE / 2.0)
-                + CELL_SIZE / 2.0;
-            pos.translation = pos.translation.with_x(new_x);
+            let new_x = (column_to_check as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0)
+                + CELL_CENTER;
+            pos.translation.x = new_x;
         }
     }
 }
@@ -244,16 +241,16 @@ fn show_tetrinino_debug_view(
 
     gizmos.rect_2d(
         Isometry2d::from_translation(Vec2::new(
-            (tetrimino.column as f32 * CELL_SIZE) - (HCELL_COUNT * CELL_SIZE / 2.0)
-                + (CELL_SIZE / 2.0),
-            (VCELL_COUNT * CELL_SIZE / 2.0) - (tetrimino.row as f32 * CELL_SIZE),
+            (tetrimino.column as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0)
+                + CELL_CENTER,
+            (FIELD_HEIGHT / 2.0) - (tetrimino.row as f32 * CELL_SIZE),
         )),
         Vec2::new(CELL_SIZE, CELL_SIZE),
         Color::srgb(0.0, 0.0, 1.0),
     );
 
     gizmos.grid_2d(
-        Isometry2d::from_translation(Vec2::new(0.0, CELL_SIZE / 2.0)),
+        Isometry2d::from_translation(Vec2::new(0.0, CELL_CENTER)),
         UVec2::new(HCELL_COUNT as u32, VCELL_COUNT as u32),
         Vec2::new(CELL_SIZE, CELL_SIZE),
         Color::srgb(0.2, 0.2, 0.2),
@@ -276,13 +273,13 @@ fn spawn_field(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let h_dist_from_center = HCELL_COUNT * CELL_SIZE / 2.0;
+    let h_dist_from_center = FIELD_WIDTH / 2.0;
     let v_dist_from_center = (VCELL_COUNT / 2.0).ceil() * CELL_SIZE;
     let border_center = BORDER_SIZE / 2.0;
 
-    let vertical = meshes.add(Rectangle::new(BORDER_SIZE, VCELL_COUNT * CELL_SIZE));
+    let vertical = meshes.add(Rectangle::new(BORDER_SIZE, FIELD_HEIGHT));
     let horizontal = meshes.add(Rectangle::new(
-        HCELL_COUNT * CELL_SIZE + (BORDER_SIZE * 2.0),
+        FIELD_WIDTH + (BORDER_SIZE * 2.0),
         BORDER_SIZE,
     ));
     let color = materials.add(Color::WHITE);
@@ -292,14 +289,14 @@ fn spawn_field(
         Field,
         Mesh2d(vertical.clone()),
         MeshMaterial2d(color.clone()),
-        Transform::from_xyz(-h_dist_from_center - border_center, CELL_SIZE / 2.0, 0.0),
+        Transform::from_xyz(-h_dist_from_center - border_center, CELL_CENTER, 0.0),
     ));
     // right
     commans.spawn((
         Field,
         Mesh2d(vertical.clone()),
         MeshMaterial2d(color.clone()),
-        Transform::from_xyz(h_dist_from_center + border_center, CELL_SIZE / 2.0, 0.0),
+        Transform::from_xyz(h_dist_from_center + border_center, CELL_CENTER, 0.0),
     ));
     // top
     commans.spawn((
@@ -315,7 +312,7 @@ fn spawn_field(
         MeshMaterial2d(color),
         Transform::from_xyz(
             0.0,
-            -((VCELL_COUNT * CELL_SIZE) - v_dist_from_center) - border_center,
+            -(FIELD_HEIGHT - v_dist_from_center) - border_center,
             0.0,
         ),
     ));
