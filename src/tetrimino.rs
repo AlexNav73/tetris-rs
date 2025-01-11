@@ -1,5 +1,6 @@
 use crate::constants::*;
 use crate::game_state::{GameState, Row};
+use crate::utils::{add_tetrimino_size, column_to_bit_mask};
 
 use bevy::prelude::*;
 
@@ -21,14 +22,15 @@ impl Tetrimino {
             column,
         };
 
-        tetrimino.rows[0] =
-            CELL_BIT_MASK << (((HCELL_COUNT as usize - 1) - column) * BITS_PER_CELL);
+        tetrimino.rows[0] = column_to_bit_mask(column);
 
         tetrimino
     }
 
-    pub fn can_move(&self, row: &Row) -> bool {
-        row.can_move(self.rows[0])
+    pub fn can_move(&self, rows: &[Row]) -> bool {
+        rows.iter()
+            .zip(self.rows)
+            .all(|(row, mask)| row.can_move(mask))
     }
 
     pub fn x(&self) -> f32 {
@@ -39,39 +41,47 @@ impl Tetrimino {
         V_DIST_FROM_CENTER - (self.row as f32 * CELL_SIZE)
     }
 
-    pub fn move_left(&mut self, row: &Row) {
-        let new_mask = self.rows[0] << BITS_PER_CELL;
+    pub fn move_left(&mut self, rows: &[Row]) {
+        let can_move = rows.iter().zip(self.rows).all(|(row, mask)| {
+            let new_mask = mask << BITS_PER_CELL;
 
-        if !row.can_move(new_mask) {
+            mask == 0 || ((new_mask & FIELD_LEFT_BORDER) == 0 && row.can_move(new_mask))
+        });
+
+        if !can_move {
             return;
         }
 
-        if (new_mask & FIELD_LEFT_BORDER) == 0 {
-            self.column -= 1;
-            self.rows[0] = new_mask;
-        }
-
-        info!("{:032b}", self.rows[0]);
+        self.column -= 1;
+        self.rows
+            .iter_mut()
+            .for_each(|mask| *mask <<= BITS_PER_CELL);
     }
 
-    pub fn move_right(&mut self, row: &Row) {
-        let new_mask = self.rows[0] >> BITS_PER_CELL;
+    pub fn move_right(&mut self, rows: &[Row]) {
+        let can_move = rows.iter().zip(self.rows).all(|(row, mask)| {
+            let new_mask = mask >> BITS_PER_CELL;
 
-        if !row.can_move(new_mask) {
+            mask == 0 || (new_mask != 0 && row.can_move(new_mask))
+        });
+
+        if !can_move {
             return;
         }
 
-        if new_mask != 0 {
-            self.column += 1;
-            self.rows[0] = new_mask;
-        }
-
-        info!("{:032b}", self.rows[0]);
+        self.column += 1;
+        self.rows
+            .iter_mut()
+            .for_each(|mask| *mask >>= BITS_PER_CELL);
     }
 
     pub fn set(&self, rows: &mut [Row]) {
-        let row = &mut rows[self.row];
-        row.set(self.rows[0]);
+        let bottom = add_tetrimino_size(self.row);
+        let field_rows = &mut rows[self.row..bottom];
+        field_rows
+            .iter_mut()
+            .zip(self.rows)
+            .for_each(|(row, mask)| row.set(mask));
     }
 }
 
@@ -135,7 +145,8 @@ pub fn tetrimino_fall(
 
         let mut can_move_down = false;
         if row_idx < VCELL_COUNT as usize {
-            let row_to_check = &game_state.rows[row_idx];
+            let bottom = add_tetrimino_size(row_idx);
+            let row_to_check = &game_state.rows[row_idx..bottom];
 
             if tetrimino.can_move(row_to_check) {
                 pos.translation.y = new_y;
@@ -160,7 +171,8 @@ pub fn move_sideways(
     game_state: Res<GameState>,
 ) {
     if let Ok((mut pos, mut tetrimino)) = tetriminos.get_single_mut() {
-        let row = &game_state.rows[tetrimino.row];
+        let bottom = add_tetrimino_size(tetrimino.row);
+        let row = &game_state.rows[tetrimino.row..bottom];
 
         if key.just_released(KeyCode::KeyA) {
             tetrimino.move_left(row);

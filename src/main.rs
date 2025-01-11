@@ -1,6 +1,7 @@
 mod constants;
 mod game_state;
 mod tetrimino;
+mod utils;
 
 use crate::game_state::*;
 use crate::tetrimino::*;

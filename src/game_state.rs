@@ -1,11 +1,20 @@
+use std::fmt::{Debug, Formatter, Result as FResult};
+
 use crate::constants::*;
 use crate::tetrimino::{Active, Tetrimino};
+use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
 
 #[derive(Default)]
 pub struct Row(u32);
+
+impl Debug for Row {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
+        f.write_fmt(format_args!("{:032b}", self.0))
+    }
+}
 
 impl Row {
     pub fn can_move(&self, mask: u32) -> bool {
@@ -14,6 +23,10 @@ impl Row {
 
     pub fn set(&mut self, mask: u32) {
         self.0 |= mask;
+    }
+
+    fn occupied(&self, column: usize) -> bool {
+        self.0 & column_to_bit_mask(column) != 0
     }
 }
 
@@ -36,12 +49,17 @@ impl GameState {
     pub fn set(&mut self, tetrimino: &Tetrimino) {
         tetrimino.set(&mut self.rows);
     }
+
+    pub fn occupied(&self, row: usize, column: usize) -> bool {
+        self.rows[row].occupied(column)
+    }
 }
 
 pub fn show_tetrinino_debug_view(
     tetriminos: Query<&Tetrimino, With<Active>>,
     mut gizmos: Gizmos,
     key: Res<ButtonInput<KeyCode>>,
+    game_state: ResMut<GameState>,
 ) {
     if !key.pressed(KeyCode::KeyE) {
         return;
@@ -63,6 +81,21 @@ pub fn show_tetrinino_debug_view(
         Vec2::new(CELL_SIZE, CELL_SIZE),
         Color::srgb(0.2, 0.2, 0.2),
     );
+
+    for row in 0..(VCELL_COUNT as usize) {
+        for column in 0..(HCELL_COUNT as usize) {
+            if game_state.occupied(row, column) {
+                let x = (column as f32 * CELL_SIZE) - (FIELD_WIDTH / 2.0) + CELL_CENTER;
+                let y = V_DIST_FROM_CENTER - (row as f32 * CELL_SIZE);
+
+                gizmos.rect_2d(
+                    Isometry2d::from_translation(Vec2::new(x, y)),
+                    Vec2::new(CELL_SIZE, CELL_SIZE),
+                    Color::srgb(0.0, 0.0, 1.0),
+                );
+            }
+        }
+    }
 }
 
 pub fn update_speed(key: Res<ButtonInput<KeyCode>>, mut game_state: ResMut<GameState>) {
