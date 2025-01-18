@@ -11,17 +11,23 @@ use bevy::prelude::*;
 fn main() {
     App::new()
         .init_resource::<GameState>()
-        .add_plugins(DefaultPlugins)
-        .add_systems(
-            Startup,
-            (spawn_camera, spawn_field, spawn_initial_tetrimino),
-        )
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                resolution: [400.0, 600.0].into(),
+                position: WindowPosition::Centered(MonitorSelection::Primary),
+                title: "Tetris".into(),
+                ..default()
+            }),
+            ..default()
+        }))
+        .add_systems(Startup, (spawn_camera, spawn_field, spawn_new_tetrimino))
         .add_systems(
             Update,
             (
                 handle_exit_key_pressed,
                 tetrimino_fall,
-                move_sideways,
+                handle_user_input,
+                toggle_debug_view,
                 show_tetrinino_debug_view,
                 update_speed,
             ),

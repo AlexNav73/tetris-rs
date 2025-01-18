@@ -34,6 +34,7 @@ impl Row {
 pub struct GameState {
     pub rows: [Row; VCELL_COUNT as usize],
     pub speed: f32,
+    pub show_debug_view: bool,
 }
 
 impl Default for GameState {
@@ -41,6 +42,7 @@ impl Default for GameState {
         Self {
             rows: [const { Row(0) }; VCELL_COUNT as usize],
             speed: 50.0,
+            show_debug_view: false,
         }
     }
 }
@@ -55,17 +57,20 @@ impl GameState {
     }
 }
 
+pub fn toggle_debug_view(mut game_state: ResMut<GameState>, key: Res<ButtonInput<KeyCode>>) {
+    if key.just_pressed(KeyCode::KeyE) {
+        game_state.show_debug_view = !game_state.show_debug_view;
+    }
+}
+
 pub fn show_tetrinino_debug_view(
-    tetriminos: Query<&Tetrimino, With<Active>>,
+    tetrimino: Single<&Tetrimino, With<Active>>,
     mut gizmos: Gizmos,
-    key: Res<ButtonInput<KeyCode>>,
-    game_state: ResMut<GameState>,
+    game_state: Res<GameState>,
 ) {
-    if !key.pressed(KeyCode::KeyE) {
+    if !game_state.show_debug_view {
         return;
     }
-
-    let tetrimino = tetriminos.single();
 
     gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
