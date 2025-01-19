@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter, Result as FResult};
 
 use crate::constants::*;
-use crate::tetrimino::{Active, Tetrimino};
+use crate::tetrimino::{Active, Block, Tetrimino};
 use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
@@ -17,12 +17,12 @@ impl Debug for Row {
 }
 
 impl Row {
-    pub fn can_move(&self, mask: u32) -> bool {
-        (self.0 & mask) == 0
+    pub fn can_move(&self, column: usize) -> bool {
+        (self.0 & column_to_bit_mask(column)) == 0
     }
 
-    pub fn set(&mut self, mask: u32) {
-        self.0 |= mask;
+    pub fn set(&mut self, column: usize) {
+        self.0 |= column_to_bit_mask(column);
     }
 
     fn occupied(&self, column: usize) -> bool {
@@ -48,8 +48,8 @@ impl Default for GameState {
 }
 
 impl GameState {
-    pub fn set(&mut self, tetrimino: &Tetrimino) {
-        tetrimino.set(&mut self.rows);
+    pub fn set(&mut self, block: &Block) {
+        block.set(&mut self.rows);
     }
 
     pub fn occupied(&self, row: usize, column: usize) -> bool {
@@ -64,7 +64,8 @@ pub fn toggle_debug_view(mut game_state: ResMut<GameState>, key: Res<ButtonInput
 }
 
 pub fn show_tetrinino_debug_view(
-    tetrimino: Single<&Tetrimino, With<Active>>,
+    tetrimino: Single<(&Tetrimino, &Children), With<Active>>,
+    blocks: Query<&Block>,
     mut gizmos: Gizmos,
     game_state: Res<GameState>,
 ) {
@@ -74,11 +75,16 @@ pub fn show_tetrinino_debug_view(
 
     gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
-    gizmos.rect_2d(
-        Isometry2d::from_translation(Vec2::new(tetrimino.x(), tetrimino.y())),
-        Vec2::new(CELL_SIZE, CELL_SIZE),
-        Color::srgb(0.0, 0.0, 1.0),
-    );
+    let (_, children) = tetrimino.into_inner();
+    for child in children.iter() {
+        let block = blocks.get(*child).expect("Block entity doesn't found");
+
+        gizmos.rect_2d(
+            Isometry2d::from_translation(Vec2::new(block.x(), block.y())),
+            Vec2::new(CELL_SIZE, CELL_SIZE),
+            Color::srgb(0.0, 0.0, 1.0),
+        );
+    }
 
     gizmos.grid_2d(
         Isometry2d::from_translation(Vec2::new(0.0, CELL_CENTER)),

@@ -8,29 +8,14 @@ use bevy::prelude::*;
 pub struct Active;
 
 #[derive(Component)]
-pub struct Tetrimino {
-    cells: [u32; 4],
+pub struct Block {
     row: usize,
     column: usize,
 }
 
-impl Tetrimino {
-    pub fn new(column: usize) -> Self {
-        let mut tetrimino = Self {
-            cells: [0; 4],
-            row: 0,
-            column,
-        };
-
-        tetrimino.cells[0] = column_to_bit_mask(column);
-
-        tetrimino
-    }
-
-    pub fn can_move(&self, rows: &[Row]) -> bool {
-        rows.iter()
-            .zip(self.cells)
-            .all(|(row, mask)| row.can_move(mask))
+impl Block {
+    pub fn new(row: usize, column: usize) -> Self {
+        Self { row, column }
     }
 
     pub fn x(&self) -> f32 {
@@ -41,74 +26,67 @@ impl Tetrimino {
         row_to_y(self.row)
     }
 
-    pub fn move_left(&mut self, rows: &[Row]) {
-        let can_move = rows.iter().zip(self.cells).all(|(row, mask)| {
-            let new_mask = mask << BITS_PER_CELL;
-
-            mask == 0 || ((new_mask & FIELD_LEFT_BORDER) == 0 && row.can_move(new_mask))
-        });
-
-        if !can_move {
-            return;
-        }
-
-        self.column -= 1;
-        self.cells
-            .iter_mut()
-            .for_each(|mask| *mask <<= BITS_PER_CELL);
+    pub fn can_move(&self, row: &Row) -> bool {
+        row.can_move(self.column)
     }
 
-    pub fn move_right(&mut self, rows: &[Row]) {
-        let can_move = rows.iter().zip(self.cells).all(|(row, mask)| {
-            let new_mask = mask >> BITS_PER_CELL;
+    pub fn can_move_left(&self, row: &Row) -> bool {
+        self.column.checked_sub(1).is_some() && row.can_move(self.column - 1)
+    }
 
-            mask == 0 || (new_mask != 0 && row.can_move(new_mask))
-        });
+    pub fn move_left(&mut self) {
+        self.column -= 1;
+    }
 
-        if !can_move {
-            return;
-        }
+    pub fn can_move_right(&self, row: &Row) -> bool {
+        (self.column + 1) < HCELL_COUNT as usize && row.can_move(self.column + 1)
+    }
 
+    pub fn move_right(&mut self) {
         self.column += 1;
-        self.cells
-            .iter_mut()
-            .for_each(|mask| *mask >>= BITS_PER_CELL);
     }
 
     pub fn set(&self, rows: &mut [Row]) {
-        let bottom = add_tetrimino_size(self.row);
-        let field_rows = &mut rows[self.row..bottom];
-        field_rows
-            .iter_mut()
-            .zip(self.cells)
-            .for_each(|(row, mask)| row.set(mask));
+        let field_row = &mut rows[self.row];
+
+        field_row.set(self.column);
     }
 }
+
+#[derive(Component)]
+pub struct Tetrimino;
 
 pub fn spawn_tetrimino(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    let tetrimino = Tetrimino::new(9);
-
     let block = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
     let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
 
-    let x = tetrimino.x();
+    let column = 9;
+    let row = 0;
+    let x = col_to_x(9);
 
     commands
         .spawn((
-            tetrimino,
+            Tetrimino,
             Transform::default(),
             Visibility::Inherited,
             Active,
         ))
         .with_children(|builder| {
             builder.spawn((
+                Block::new(row, column),
+                Mesh2d(block.clone()),
+                MeshMaterial2d(color.clone()),
+                Transform::from_xyz(x, V_DIST_FROM_CENTER, 1.0),
+            ));
+            builder.spawn((
+                Block::new(row + 1, column),
                 Mesh2d(block),
                 MeshMaterial2d(color),
-                Transform::from_xyz(x, V_DIST_FROM_CENTER, 1.0),
+                Transform::from_xyz(x, V_DIST_FROM_CENTER - CELL_SIZE, 1.0),
             ));
         })
         .observe(on_tetrimino_stopped);
@@ -140,58 +118,93 @@ fn on_tetrimino_stopped(
 
 pub fn tetrimino_fall(
     mut commands: Commands,
-    tetrimino: Single<(Entity, &mut Tetrimino, &Children), With<Active>>,
-    mut blocks: Query<&mut Transform>,
+    tetrimino: Single<(Entity, &Tetrimino, &Children), With<Active>>,
+    mut blocks: Query<(&mut Transform, &mut Block)>,
     mut game_state: ResMut<GameState>,
     time: Res<Time>,
 ) {
-    let (entity, mut tetrimino, children) = tetrimino.into_inner();
-    let mut block = blocks
-        .get_mut(*children.iter().next().unwrap())
-        .expect("Block entity doesn't found");
-    let new_y = block.translation.y - (time.delta_secs() * game_state.speed);
-    let translated_y = new_y + V_DIST_FROM_CENTER;
-    let row_idx = ((FIELD_HEIGHT - translated_y) / CELL_SIZE).ceil() as usize;
+    let (entity, _, children) = tetrimino.into_inner();
 
-    let mut can_move_down = false;
-    if row_idx < VCELL_COUNT as usize {
-        let bottom = add_tetrimino_size(row_idx);
-        let row_to_check = &game_state.rows[row_idx..bottom];
+    let mut advancements = Vec::new();
+    let mut reached_bottom = false;
 
-        if tetrimino.can_move(row_to_check) {
-            block.translation.y = new_y;
-            tetrimino.row = row_idx;
-            can_move_down = true;
+    for child in children.iter() {
+        let (transform, block) = blocks.get_mut(*child).expect("Block entity doesn't found");
+        let new_y = transform.translation.y - (time.delta_secs() * game_state.speed);
+        let translated_y = new_y + V_DIST_FROM_CENTER;
+        let row_idx = ((FIELD_HEIGHT - translated_y) / CELL_SIZE).ceil() as usize;
+
+        if row_idx < VCELL_COUNT as usize {
+            let row_to_check = &game_state.rows[row_idx];
+
+            if block.can_move(row_to_check) {
+                advancements.push((new_y, row_idx));
+            } else {
+                reached_bottom = true;
+            }
+        } else {
+            reached_bottom = true;
         }
     }
 
-    if !can_move_down {
-        tetrimino.row = row_idx - 1;
-        block.translation.y = tetrimino.y();
+    if !reached_bottom {
+        for (child, (new_y, row_idx)) in children.iter().zip(advancements) {
+            let (mut transform, mut block) =
+                blocks.get_mut(*child).expect("Block entity doesn't found");
 
-        game_state.set(&tetrimino);
+            if row_idx < VCELL_COUNT as usize {
+                block.row = row_idx;
+                transform.translation.y = new_y;
+            }
+        }
+    } else {
+        for child in children.iter() {
+            let (mut transform, block) =
+                blocks.get_mut(*child).expect("Block entity doesn't found");
+
+            transform.translation.y = row_to_y(block.row);
+            game_state.set(&block);
+        }
+
         commands.trigger_targets(TetriminoStopped, entity);
     }
 }
 
 pub fn handle_user_input(
-    tetrimino: Single<(&mut Tetrimino, &Children), With<Active>>,
-    mut blocks: Query<&mut Transform>,
+    tetrimino: Single<(&Tetrimino, &Children), With<Active>>,
+    mut blocks: Query<(&mut Transform, &mut Block)>,
     key: Res<ButtonInput<KeyCode>>,
     game_state: Res<GameState>,
 ) {
-    let (mut tetrimino, children) = tetrimino.into_inner();
-    let bottom = add_tetrimino_size(tetrimino.row);
-    let rows = &game_state.rows[tetrimino.row..bottom];
+    let (_, children) = tetrimino.into_inner();
 
-    if tetrimino.can_move(rows) {
+    let mut can_move = true;
+
+    for child in children.iter() {
+        let (_, block) = blocks.get(*child).expect("Block entity doesn't found");
+        let row = &game_state.rows[block.row];
+
+        if key.just_released(KeyCode::KeyA) && !block.can_move_left(row) {
+            can_move = false;
+        } else if key.just_pressed(KeyCode::KeyD) && !block.can_move_right(row) {
+            can_move = false;
+        }
+    }
+
+    if !can_move {
+        return;
+    }
+
+    for child in children.iter() {
+        let (mut transform, mut block) =
+            blocks.get_mut(*child).expect("Block entity doesn't found");
+
         if key.just_released(KeyCode::KeyA) {
-            tetrimino.move_left(rows);
+            block.move_left();
         } else if key.just_pressed(KeyCode::KeyD) {
-            tetrimino.move_right(rows);
+            block.move_right();
         }
 
-        let mut block = blocks.get_mut(*children.iter().next().unwrap()).unwrap();
-        block.translation.x = tetrimino.x();
+        transform.translation.x = block.x();
     }
 }
