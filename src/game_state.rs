@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Formatter, Result as FResult};
 
 use crate::constants::*;
+use crate::scene::Scene;
 use crate::tetrimino::{Active, Block, Tetrimino};
 use crate::utils::column_to_bit_mask;
 
@@ -34,7 +35,6 @@ impl Row {
 pub struct GameState {
     pub rows: [Row; VCELL_COUNT as usize],
     pub speed: f32,
-    pub show_debug_view: bool,
 }
 
 impl Default for GameState {
@@ -42,7 +42,6 @@ impl Default for GameState {
         Self {
             rows: [const { Row(0) }; VCELL_COUNT as usize],
             speed: 50.0,
-            show_debug_view: false,
         }
     }
 }
@@ -57,9 +56,16 @@ impl GameState {
     }
 }
 
-pub fn toggle_debug_view(mut game_state: ResMut<GameState>, key: Res<ButtonInput<KeyCode>>) {
+pub fn toggle_debug_view(
+    key: Res<ButtonInput<KeyCode>>,
+    state: Res<State<Scene>>,
+    mut next_state: ResMut<NextState<Scene>>,
+) {
     if key.just_pressed(KeyCode::KeyE) {
-        game_state.show_debug_view = !game_state.show_debug_view;
+        match state.get() {
+            Scene::Game => next_state.set(Scene::DebugView),
+            Scene::DebugView => next_state.set(Scene::Game),
+        }
     }
 }
 
@@ -69,10 +75,6 @@ pub fn show_tetrinino_debug_view(
     mut gizmos: Gizmos,
     game_state: Res<GameState>,
 ) {
-    if !game_state.show_debug_view {
-        return;
-    }
-
     gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
     let (_, children) = tetrimino.into_inner();
@@ -117,7 +119,7 @@ pub fn update_speed(key: Res<ButtonInput<KeyCode>>, mut game_state: ResMut<GameS
     }
 }
 
-pub fn spawn_field(
+pub fn show_field(
     mut commans: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,

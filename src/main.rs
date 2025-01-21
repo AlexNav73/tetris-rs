@@ -1,16 +1,17 @@
 mod constants;
 mod game_state;
+mod scene;
 mod tetrimino;
 mod utils;
 
 use crate::game_state::*;
+use crate::scene::Scene;
 use crate::tetrimino::*;
 
 use bevy::prelude::*;
 
 fn main() {
     App::new()
-        .init_resource::<GameState>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 resolution: [400.0, 600.0].into(),
@@ -20,16 +21,20 @@ fn main() {
             }),
             ..default()
         }))
-        .add_systems(Startup, (spawn_camera, spawn_field, spawn_new_tetrimino))
+        .init_resource::<GameState>()
+        .init_state::<Scene>()
+        .add_systems(
+            Startup,
+            (spawn_camera, show_field, spawn_new_tetrimino).run_if(in_state(Scene::Game)),
+        )
         .add_systems(
             Update,
             (
                 handle_exit_key_pressed,
-                tetrimino_fall,
-                handle_user_input,
-                toggle_debug_view,
-                show_tetrinino_debug_view,
-                update_speed,
+                (tetrimino_fall, handle_user_input, update_speed)
+                    .run_if(in_state(Scene::Game).or(in_state(Scene::DebugView))),
+                toggle_debug_view.run_if(in_state(Scene::Game).or(in_state(Scene::DebugView))),
+                show_tetrinino_debug_view.run_if(in_state(Scene::DebugView)),
             ),
         )
         .run();
