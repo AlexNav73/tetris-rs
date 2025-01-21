@@ -9,47 +9,96 @@ pub struct Active;
 
 #[derive(Component)]
 pub struct Block {
+    local_row: usize,
+    local_column: usize,
     row: usize,
     column: usize,
 }
 
 impl Block {
-    pub fn new(row: usize, column: usize) -> Self {
-        Self { row, column }
+    pub fn new(row: usize, column: usize, local_row: usize, local_column: usize) -> Self {
+        Self {
+            row,
+            column,
+            local_row,
+            local_column,
+        }
     }
 
     pub fn x(&self) -> f32 {
-        col_to_x(self.column)
+        col_to_x(self.column())
     }
 
     pub fn y(&self) -> f32 {
-        row_to_y(self.row)
+        row_to_y(self.row())
+    }
+
+    pub fn row(&self) -> usize {
+        self.row + self.local_row
+    }
+
+    pub fn set_row(&mut self, value: usize) {
+        self.row = value - self.local_row;
+    }
+
+    pub fn column(&self) -> usize {
+        self.column + self.local_column
+    }
+
+    pub fn set_column(&mut self, value: usize) {
+        if let Some(column) = value.checked_sub(self.local_column) {
+            self.column = column;
+        } else {
+            self.column = 0;
+            self.local_column = self
+                .local_column
+                .checked_sub(self.local_column - value)
+                .unwrap_or(0);
+        }
     }
 
     pub fn can_move(&self, row: &Row) -> bool {
-        row.can_move(self.column)
+        row.can_move(self.column())
     }
 
     pub fn can_move_left(&self, row: &Row) -> bool {
-        self.column.checked_sub(1).is_some() && row.can_move(self.column - 1)
+        self.column()
+            .checked_sub(1)
+            .is_some_and(|c| row.can_move(c))
     }
 
     pub fn move_left(&mut self) {
-        self.column -= 1;
+        self.set_column(self.column() - 1);
     }
 
     pub fn can_move_right(&self, row: &Row) -> bool {
-        (self.column + 1) < HCELL_COUNT as usize && row.can_move(self.column + 1)
+        (self.column() + 1) < HCELL_COUNT as usize && row.can_move(self.column() + 1)
     }
 
     pub fn move_right(&mut self) {
-        self.column += 1;
+        self.set_column(self.column() + 1);
+    }
+
+    pub fn can_rotate(&self) -> bool {
+        let local_row = self.local_column;
+        let local_column = TETRIMINO_SIZE - self.local_row - 1;
+
+        return self.column + local_column < HCELL_COUNT as usize
+            && self.row + local_row < VCELL_COUNT as usize;
+    }
+
+    pub fn rotate(&mut self) {
+        let local_row = self.local_column;
+        let local_column = TETRIMINO_SIZE - self.local_row - 1;
+
+        self.local_row = local_row;
+        self.local_column = local_column;
     }
 
     pub fn set(&self, rows: &mut [Row]) {
-        let field_row = &mut rows[self.row];
+        let field_row = &mut rows[self.row()];
 
-        field_row.set(self.column);
+        field_row.set(self.column());
     }
 }
 
@@ -77,13 +126,13 @@ pub fn spawn_tetrimino(
         ))
         .with_children(|builder| {
             builder.spawn((
-                Block::new(row, column),
+                Block::new(row, column, 0, 0),
                 Mesh2d(block.clone()),
                 MeshMaterial2d(color.clone()),
                 Transform::from_xyz(x, V_DIST_FROM_CENTER, 1.0),
             ));
             builder.spawn((
-                Block::new(row + 1, column),
+                Block::new(row, column, 1, 0),
                 Mesh2d(block),
                 MeshMaterial2d(color),
                 Transform::from_xyz(x, V_DIST_FROM_CENTER - CELL_SIZE, 1.0),
@@ -153,7 +202,7 @@ pub fn tetrimino_fall(
                 blocks.get_mut(*child).expect("Block entity doesn't found");
 
             if row_idx < VCELL_COUNT as usize {
-                block.row = row_idx;
+                block.set_row(row_idx);
                 transform.translation.y = new_y;
             }
         }
@@ -162,7 +211,7 @@ pub fn tetrimino_fall(
             let (mut transform, block) =
                 blocks.get_mut(*child).expect("Block entity doesn't found");
 
-            transform.translation.y = row_to_y(block.row);
+            transform.translation.y = block.y();
             game_state.set(&block);
         }
 
@@ -182,7 +231,7 @@ pub fn handle_user_input(
 
     for child in children.iter() {
         let (_, block) = blocks.get(*child).expect("Block entity doesn't found");
-        let row = &game_state.rows[block.row];
+        let row = &game_state.rows[block.row()];
 
         if key.just_released(KeyCode::KeyA) && !block.can_move_left(row) {
             can_move = false;
@@ -206,5 +255,35 @@ pub fn handle_user_input(
         }
 
         transform.translation.x = block.x();
+    }
+}
+
+pub fn rotate_tetrimino(
+    tetrimino: Single<(&Tetrimino, &Children), With<Active>>,
+    mut blocks: Query<(&mut Transform, &mut Block)>,
+    key: Res<ButtonInput<KeyCode>>,
+) {
+    let (_, children) = tetrimino.into_inner();
+
+    if !key.just_pressed(KeyCode::KeyW) {
+        return;
+    }
+
+    let can_rotate = children
+        .iter()
+        .map(|child| blocks.get(*child).expect("Block entity doesn't found").1)
+        .all(|block| block.can_rotate());
+
+    if !can_rotate {
+        return;
+    }
+
+    for child in children.iter() {
+        let (mut transform, mut block) =
+            blocks.get_mut(*child).expect("Block entity doesn't found");
+        block.rotate();
+
+        transform.translation.x = block.x();
+        transform.translation.y = block.y();
     }
 }

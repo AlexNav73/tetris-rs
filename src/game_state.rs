@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Formatter, Result as FResult};
 
 use crate::constants::*;
-use crate::scene::Scene;
 use crate::tetrimino::{Active, Block, Tetrimino};
 use crate::utils::column_to_bit_mask;
 
@@ -56,19 +55,6 @@ impl GameState {
     }
 }
 
-pub fn toggle_debug_view(
-    key: Res<ButtonInput<KeyCode>>,
-    state: Res<State<Scene>>,
-    mut next_state: ResMut<NextState<Scene>>,
-) {
-    if key.just_pressed(KeyCode::KeyE) {
-        match state.get() {
-            Scene::Game => next_state.set(Scene::DebugView),
-            Scene::DebugView => next_state.set(Scene::Game),
-        }
-    }
-}
-
 pub fn show_tetrinino_debug_view(
     tetrimino: Single<(&Tetrimino, &Children), With<Active>>,
     blocks: Query<&Block>,
@@ -104,7 +90,7 @@ pub fn show_tetrinino_debug_view(
                 gizmos.rect_2d(
                     Isometry2d::from_translation(Vec2::new(x, y)),
                     Vec2::new(CELL_SIZE, CELL_SIZE),
-                    Color::srgb(0.0, 0.0, 1.0),
+                    Color::srgb(0.0, 1.0, 0.0),
                 );
             }
         }
@@ -114,8 +100,8 @@ pub fn show_tetrinino_debug_view(
 pub fn update_speed(key: Res<ButtonInput<KeyCode>>, mut game_state: ResMut<GameState>) {
     if key.pressed(KeyCode::ArrowUp) {
         game_state.speed += 3.0;
-    } else if key.pressed(KeyCode::ArrowDown) && game_state.speed - 3.0 > 0.0 {
-        game_state.speed -= 3.0;
+    } else if key.pressed(KeyCode::ArrowDown) {
+        game_state.speed = (game_state.speed - 3.0).max(0.0);
     }
 }
 

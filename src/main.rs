@@ -5,7 +5,7 @@ mod tetrimino;
 mod utils;
 
 use crate::game_state::*;
-use crate::scene::Scene;
+use crate::scene::*;
 use crate::tetrimino::*;
 
 use bevy::prelude::*;
@@ -22,26 +22,38 @@ fn main() {
             ..default()
         }))
         .init_resource::<GameState>()
-        .init_state::<Scene>()
+        .init_state::<GameScene>()
         .add_systems(
             Startup,
-            (spawn_camera, show_field, spawn_new_tetrimino).run_if(in_state(Scene::Game)),
+            (setup, show_field, spawn_new_tetrimino).run_if(in_state(GameScene::Game)),
         )
         .add_systems(
             Update,
             (
                 handle_exit_key_pressed,
-                (tetrimino_fall, handle_user_input, update_speed)
-                    .run_if(in_state(Scene::Game).or(in_state(Scene::DebugView))),
-                toggle_debug_view.run_if(in_state(Scene::Game).or(in_state(Scene::DebugView))),
-                show_tetrinino_debug_view.run_if(in_state(Scene::DebugView)),
+                (
+                    tetrimino_fall,
+                    handle_user_input,
+                    update_speed,
+                    rotate_tetrimino,
+                )
+                    .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
+                toggle_debug_view
+                    .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
+                show_tetrinino_debug_view
+                    .after(tetrimino_fall)
+                    .run_if(in_state(GameScene::DebugView)),
             ),
         )
         .run();
 }
 
-fn spawn_camera(mut commands: Commands) {
+fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
     commands.spawn(Camera2d);
+
+    let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
+
+    config.depth_bias = -1.0;
 }
 
 fn handle_exit_key_pressed(
