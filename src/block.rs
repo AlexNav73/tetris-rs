@@ -4,6 +4,24 @@ use crate::constants::*;
 use crate::game_state::*;
 use crate::utils::*;
 
+pub fn line(column: usize) -> Vec<Block> {
+    vec![
+        Block::new(0, column, 0, 0),
+        Block::new(0, column, 1, 0),
+        Block::new(0, column, 2, 0),
+        Block::new(0, column, 3, 0),
+    ]
+}
+
+pub fn square(column: usize) -> Vec<Block> {
+    vec![
+        Block::new(0, column, 0, 0),
+        Block::new(0, column, 0, 1),
+        Block::new(0, column, 1, 0),
+        Block::new(0, column, 1, 1),
+    ]
+}
+
 #[derive(Component)]
 pub struct Block {
     local_row: usize,
@@ -76,17 +94,17 @@ impl Block {
         self.set_column(self.column() + 1);
     }
 
-    pub fn can_rotate(&self) -> bool {
+    pub fn can_rotate(&self, size: usize) -> bool {
         let local_row = self.local_column;
-        let local_column = TETROMINO_SIZE - self.local_row - 1;
+        let local_column = size - self.local_row - 1;
 
         return self.column + local_column < HCELL_COUNT as usize
             && self.row + local_row < VCELL_COUNT as usize;
     }
 
-    pub fn rotate(&mut self) {
+    pub fn rotate(&mut self, size: usize) {
         let local_row = self.local_column;
-        let local_column = TETROMINO_SIZE - self.local_row - 1;
+        let local_column = size - self.local_row - 1;
 
         self.local_row = local_row;
         self.local_column = local_column;

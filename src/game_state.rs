@@ -2,6 +2,7 @@ use std::fmt::{Debug, Formatter, Result as FResult};
 
 use crate::block::Block;
 use crate::constants::*;
+use crate::events::{RowFinished, TetrominoReachedButtom};
 use crate::scene::*;
 use crate::tetromino::{tetromino_fall, Falling, Tetromino};
 use crate::utils::column_to_bit_mask;
@@ -24,7 +25,8 @@ impl Plugin for GameStatePlugin {
                         .after(tetromino_fall)
                         .run_if(in_state(GameScene::DebugView)),
                 ),
-            );
+            )
+            .add_observer(on_tetromino_reached_bottom);
     }
 }
 
@@ -48,6 +50,17 @@ impl Row {
 
     fn occupied(&self, column: usize) -> bool {
         self.0 & column_to_bit_mask(column) != 0
+    }
+
+    fn finished(&self) -> bool {
+        for i in 0..(HCELL_COUNT as usize) {
+            let mask = CELL_BIT_MASK << (i * BITS_PER_CELL);
+            if self.0 & mask == 0 {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -73,6 +86,20 @@ impl GameState {
 
     pub fn occupied(&self, row: usize, column: usize) -> bool {
         self.rows[row].occupied(column)
+    }
+}
+
+fn on_tetromino_reached_bottom(
+    _trigger: Trigger<TetrominoReachedButtom>,
+    mut commands: Commands,
+    game_state: Res<GameState>,
+) {
+    for row in game_state.rows.iter() {
+        if !row.finished() {
+            continue;
+        }
+
+        commands.trigger(RowFinished);
     }
 }
 

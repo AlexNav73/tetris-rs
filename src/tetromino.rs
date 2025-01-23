@@ -1,16 +1,18 @@
-use crate::block::Block;
+use crate::block::*;
 use crate::constants::*;
 use crate::events::*;
 use crate::game_state::GameState;
-use crate::utils::*;
 
 use bevy::prelude::*;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 pub struct TetrominoPlugin;
 
 impl Plugin for TetrominoPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_new_tetromino)
+        app.insert_resource(Random(ChaCha8Rng::from_entropy()))
+            .add_systems(Startup, spawn_new_tetromino)
             .add_systems(
                 RunFixedMainLoop,
                 (handle_user_input, rotate_tetromino)
@@ -20,44 +22,66 @@ impl Plugin for TetrominoPlugin {
     }
 }
 
+#[derive(Resource)]
+pub struct Random(ChaCha8Rng);
+
 #[derive(Clone, Copy, Component)]
 pub struct Falling;
 
 #[derive(Component)]
-pub struct Tetromino;
+pub struct Tetromino {
+    size: usize,
+}
+
+impl Tetromino {
+    fn line(column: usize) -> (Self, Vec<Block>) {
+        (Self { size: 4 }, line(column))
+    }
+
+    fn square(column: usize) -> (Self, Vec<Block>) {
+        (Self { size: 2 }, square(column))
+    }
+
+    fn new(random: &mut ChaCha8Rng, column: usize) -> (Self, Vec<Block>) {
+        let shape = random.gen_range(0..=1);
+        match shape {
+            0 => Self::line(column),
+            1 => Self::square(column),
+            _ => unimplemented!("Shape is not supported: {}", shape),
+        }
+    }
+}
 
 fn spawn_tetromino(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    random: &mut Random,
 ) {
-    let block = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
+    let rect = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
     let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
 
-    let column = 5;
-    let row = 0;
-    let x = col_to_x(5);
+    let (tetromino, blocks) = Tetromino::new(&mut random.0, 5);
 
     commands
         .spawn((
-            Tetromino,
+            tetromino,
             Transform::default(),
             Visibility::Inherited,
             Falling,
         ))
         .with_children(|builder| {
-            builder.spawn((
-                Block::new(row, column, 0, 0),
-                Mesh2d(block.clone()),
-                MeshMaterial2d(color.clone()),
-                Transform::from_xyz(x, V_DIST_FROM_CENTER, 1.0),
-            ));
-            builder.spawn((
-                Block::new(row, column, 1, 0),
-                Mesh2d(block),
-                MeshMaterial2d(color),
-                Transform::from_xyz(x, V_DIST_FROM_CENTER - CELL_SIZE, 1.0),
-            ));
+            for block in blocks {
+                let x = block.x();
+                let y = block.y();
+
+                builder.spawn((
+                    block,
+                    Mesh2d(rect.clone()),
+                    MeshMaterial2d(color.clone()),
+                    Transform::from_xyz(x, y, 1.0),
+                ));
+            }
         })
         .observe(on_tetromino_stopped);
 }
@@ -66,8 +90,9 @@ fn spawn_new_tetromino(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut random: ResMut<Random>,
 ) {
-    spawn_tetromino(&mut commands, &mut meshes, &mut materials);
+    spawn_tetromino(&mut commands, &mut meshes, &mut materials, &mut random);
 }
 
 #[derive(Event)]
@@ -78,6 +103,7 @@ fn on_tetromino_stopped(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut random: ResMut<Random>,
 ) {
     let entity = trigger.entity();
 
@@ -85,7 +111,7 @@ fn on_tetromino_stopped(
 
     commands.trigger(TetrominoReachedButtom);
 
-    spawn_tetromino(&mut commands, &mut meshes, &mut materials);
+    spawn_tetromino(&mut commands, &mut meshes, &mut materials, &mut random);
 }
 
 pub fn tetromino_fall(
@@ -184,7 +210,7 @@ fn rotate_tetromino(
     mut blocks: Query<(&mut Transform, &mut Block)>,
     key: Res<ButtonInput<KeyCode>>,
 ) {
-    let (_, children) = tetromino.into_inner();
+    let (tetromino, children) = tetromino.into_inner();
 
     if !key.just_pressed(KeyCode::KeyW) {
         return;
@@ -193,7 +219,7 @@ fn rotate_tetromino(
     let can_rotate = children
         .iter()
         .map(|child| blocks.get(*child).expect("Block entity doesn't found").1)
-        .all(|block| block.can_rotate());
+        .all(|block| block.can_rotate(tetromino.size));
 
     if !can_rotate {
         return;
@@ -202,7 +228,7 @@ fn rotate_tetromino(
     for child in children.iter() {
         let (mut transform, mut block) =
             blocks.get_mut(*child).expect("Block entity doesn't found");
-        block.rotate();
+        block.rotate(tetromino.size);
 
         transform.translation.x = block.x();
         transform.translation.y = block.y();

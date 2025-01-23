@@ -4,7 +4,6 @@ pub const CELL_SIZE: f32 = 20.0;
 pub const BORDER_SIZE: f32 = 5.0;
 pub const BITS_PER_CELL: usize = 3;
 pub const CELL_BIT_MASK: u32 = 0b111;
-pub const TETROMINO_SIZE: usize = 2;
 
 pub const CELL_CENTER: f32 = CELL_SIZE / 2.0;
 pub const FIELD_WIDTH: f32 = HCELL_COUNT * CELL_SIZE;
