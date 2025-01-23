@@ -1,12 +1,17 @@
+mod block;
 mod constants;
+mod countdown;
+mod events;
 mod game_state;
 mod scene;
-mod tetrimino;
+mod tetromino;
+mod ui;
 mod utils;
 
-use crate::game_state::*;
-use crate::scene::*;
-use crate::tetrimino::*;
+use crate::countdown::CountdownPlugin;
+use crate::game_state::GameStatePlugin;
+use crate::tetromino::TetrominoPlugin;
+use crate::ui::UIPlugin;
 
 use bevy::prelude::*;
 
@@ -21,30 +26,12 @@ fn main() {
             }),
             ..default()
         }))
-        .init_resource::<GameState>()
-        .init_state::<GameScene>()
-        .add_systems(
-            Startup,
-            (setup, show_field, spawn_new_tetrimino).run_if(in_state(GameScene::Game)),
-        )
-        .add_systems(
-            Update,
-            (
-                handle_exit_key_pressed,
-                (
-                    tetrimino_fall,
-                    handle_user_input,
-                    update_speed,
-                    rotate_tetrimino,
-                )
-                    .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
-                toggle_debug_view
-                    .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
-                show_tetrinino_debug_view
-                    .after(tetrimino_fall)
-                    .run_if(in_state(GameScene::DebugView)),
-            ),
-        )
+        .add_plugins(TetrominoPlugin)
+        .add_plugins(CountdownPlugin)
+        .add_plugins(UIPlugin)
+        .add_plugins(GameStatePlugin)
+        .add_systems(Startup, setup)
+        .add_systems(Update, handle_exit_key_pressed)
         .run();
 }
 

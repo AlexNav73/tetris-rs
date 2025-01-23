@@ -1,11 +1,32 @@
 use std::fmt::{Debug, Formatter, Result as FResult};
 
+use crate::block::Block;
 use crate::constants::*;
-use crate::tetrimino::{Active, Block, Tetrimino};
+use crate::scene::*;
+use crate::tetromino::{tetromino_fall, Falling, Tetromino};
 use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
+
+pub struct GameStatePlugin;
+
+impl Plugin for GameStatePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<GameState>()
+            .init_state::<GameScene>()
+            .add_systems(Startup, show_field)
+            .add_systems(
+                Update,
+                (
+                    toggle_debug_view,
+                    show_tetromino_debug_view
+                        .after(tetromino_fall)
+                        .run_if(in_state(GameScene::DebugView)),
+                ),
+            );
+    }
+}
 
 #[derive(Default)]
 pub struct Row(u32);
@@ -55,15 +76,15 @@ impl GameState {
     }
 }
 
-pub fn show_tetrinino_debug_view(
-    tetrimino: Single<(&Tetrimino, &Children), With<Active>>,
+fn show_tetromino_debug_view(
+    tetromino: Single<(&Tetromino, &Children), With<Falling>>,
     blocks: Query<&Block>,
     mut gizmos: Gizmos,
     game_state: Res<GameState>,
 ) {
     gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
-    let (_, children) = tetrimino.into_inner();
+    let (_, children) = tetromino.into_inner();
     for child in children.iter() {
         let block = blocks.get(*child).expect("Block entity doesn't found");
 
@@ -97,15 +118,7 @@ pub fn show_tetrinino_debug_view(
     }
 }
 
-pub fn update_speed(key: Res<ButtonInput<KeyCode>>, mut game_state: ResMut<GameState>) {
-    if key.pressed(KeyCode::ArrowUp) {
-        game_state.speed += 3.0;
-    } else if key.pressed(KeyCode::ArrowDown) {
-        game_state.speed = (game_state.speed - 3.0).max(0.0);
-    }
-}
-
-pub fn show_field(
+fn show_field(
     mut commans: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
