@@ -9,6 +9,7 @@ use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
+use bevy::utils::tracing::instrument;
 
 pub struct GameStatePlugin;
 
@@ -101,6 +102,7 @@ impl GameState {
     }
 }
 
+#[instrument(skip_all)]
 fn on_tetromino_reached_bottom(
     trigger: Trigger<TetrominoReachedButtom>,
     mut commands: Commands,
@@ -125,6 +127,7 @@ fn on_tetromino_reached_bottom(
             }
         }
 
+        info!("clearing completed row");
         game_state.clear_row(idx);
     }
 }
