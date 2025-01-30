@@ -2,9 +2,9 @@ use std::fmt::{Debug, Formatter, Result as FResult};
 
 use crate::block::Block;
 use crate::constants::*;
-use crate::events::{RowFinished, TetrominoReachedButtom};
+use crate::events::*;
 use crate::scene::*;
-use crate::tetromino::{tetromino_fall, Falling, Tetromino};
+use crate::tetromino::*;
 use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
@@ -20,9 +20,15 @@ impl Plugin for GameStatePlugin {
             .add_systems(
                 Update,
                 (
-                    toggle_debug_view,
+                    toggle_debug_view
+                        .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
+                    pause.run_if(
+                        in_state(GameScene::Game)
+                            .or(in_state(GameScene::DebugView))
+                            .or(in_state(GameScene::Pause)),
+                    ),
                     show_tetromino_debug_view
-                        .after(tetromino_fall)
+                        .after(on_countdown_tick)
                         .run_if(in_state(GameScene::DebugView)),
                 ),
             )
@@ -52,7 +58,7 @@ impl Row {
         self.0 & column_to_bit_mask(column) != 0
     }
 
-    fn finished(&self) -> bool {
+    fn is_finished(&self) -> bool {
         for i in 0..(HCELL_COUNT as usize) {
             let mask = CELL_BIT_MASK << (i * BITS_PER_CELL);
             if self.0 & mask == 0 {
@@ -67,14 +73,12 @@ impl Row {
 #[derive(Resource)]
 pub struct GameState {
     pub rows: [Row; VCELL_COUNT as usize],
-    pub speed: f32,
 }
 
 impl Default for GameState {
     fn default() -> Self {
         Self {
             rows: [const { Row(0) }; VCELL_COUNT as usize],
-            speed: 50.0,
         }
     }
 }
@@ -87,34 +91,52 @@ impl GameState {
     pub fn occupied(&self, row: usize, column: usize) -> bool {
         self.rows[row].occupied(column)
     }
+
+    fn clear_row(&mut self, row: usize) {
+        self.rows[row].0 = 0;
+
+        for current_row in (1..=row).rev() {
+            self.rows[current_row].0 = self.rows[current_row - 1].0;
+        }
+    }
 }
 
 fn on_tetromino_reached_bottom(
-    _trigger: Trigger<TetrominoReachedButtom>,
+    trigger: Trigger<TetrominoReachedButtom>,
     mut commands: Commands,
-    game_state: Res<GameState>,
+    mut game_state: ResMut<GameState>,
+    mut blocks: Query<(Entity, &mut Block, &mut Transform), Without<Falling>>,
 ) {
-    for row in game_state.rows.iter() {
-        if !row.finished() {
+    let event = trigger.event();
+
+    for idx in event.rows.iter().copied() {
+        let row = &mut game_state.rows[idx];
+
+        if !row.is_finished() {
             continue;
         }
 
-        commands.trigger(RowFinished);
+        for (entity, mut block, mut transform) in &mut blocks {
+            if block.row() == idx {
+                commands.entity(entity).despawn();
+            } else if block.row() < idx {
+                block.move_to_next_row();
+                transform.translation.y = block.y();
+            }
+        }
+
+        game_state.clear_row(idx);
     }
 }
 
 fn show_tetromino_debug_view(
-    tetromino: Single<(&Tetromino, &Children), With<Falling>>,
     blocks: Query<&Block>,
     mut gizmos: Gizmos,
     game_state: Res<GameState>,
 ) {
     gizmos.circle_2d(Isometry2d::IDENTITY, 1.0, GRAY);
 
-    let (_, children) = tetromino.into_inner();
-    for child in children.iter() {
-        let block = blocks.get(*child).expect("Block entity doesn't found");
-
+    for block in blocks.iter() {
         gizmos.rect_2d(
             Isometry2d::from_translation(Vec2::new(block.x(), block.y())),
             Vec2::new(CELL_SIZE, CELL_SIZE),

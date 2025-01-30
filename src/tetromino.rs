@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use crate::block::*;
 use crate::constants::*;
 use crate::events::*;
 use crate::game_state::GameState;
+use crate::scene::GameScene;
 
 use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
@@ -16,39 +19,36 @@ impl Plugin for TetrominoPlugin {
             .add_systems(
                 RunFixedMainLoop,
                 (handle_user_input, rotate_tetromino)
+                    .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView)))
                     .in_set(RunFixedMainLoopSystem::BeforeFixedMainLoop),
             )
-            .add_observer(tetromino_fall);
+            .add_observer(on_countdown_tick)
+            .add_observer(on_tetromino_stopped);
     }
 }
 
 #[derive(Resource)]
-pub struct Random(ChaCha8Rng);
-
-#[derive(Clone, Copy, Component)]
-pub struct Falling;
+struct Random(ChaCha8Rng);
 
 #[derive(Component)]
-pub struct Tetromino {
+pub struct Falling {
     size: usize,
 }
 
-impl Tetromino {
-    fn line(column: usize) -> (Self, Vec<Block>) {
-        (Self { size: 4 }, line(column))
-    }
+fn create_line(column: usize) -> (usize, Vec<Block>) {
+    (4, line(column))
+}
 
-    fn square(column: usize) -> (Self, Vec<Block>) {
-        (Self { size: 2 }, square(column))
-    }
+fn create_square(column: usize) -> (usize, Vec<Block>) {
+    (2, square(column))
+}
 
-    fn new(random: &mut ChaCha8Rng, column: usize) -> (Self, Vec<Block>) {
-        let shape = random.gen_range(0..=1);
-        match shape {
-            0 => Self::line(column),
-            1 => Self::square(column),
-            _ => unimplemented!("Shape is not supported: {}", shape),
-        }
+fn create_new_shape(random: &mut ChaCha8Rng, column: usize) -> (usize, Vec<Block>) {
+    let shape = random.gen_range(0..=1);
+    match shape {
+        0 => create_line(column),
+        1 => create_square(column),
+        _ => unimplemented!("Shape is not supported: {}", shape),
     }
 }
 
@@ -61,29 +61,20 @@ fn spawn_tetromino(
     let rect = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
     let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
 
-    let (tetromino, blocks) = Tetromino::new(&mut random.0, 5);
+    let (size, blocks) = create_new_shape(&mut random.0, 5);
 
-    commands
-        .spawn((
-            tetromino,
-            Transform::default(),
-            Visibility::Inherited,
-            Falling,
-        ))
-        .with_children(|builder| {
-            for block in blocks {
-                let x = block.x();
-                let y = block.y();
+    for block in blocks {
+        let x = block.x();
+        let y = block.y();
 
-                builder.spawn((
-                    block,
-                    Mesh2d(rect.clone()),
-                    MeshMaterial2d(color.clone()),
-                    Transform::from_xyz(x, y, 1.0),
-                ));
-            }
-        })
-        .observe(on_tetromino_stopped);
+        commands.spawn((
+            block,
+            Mesh2d(rect.clone()),
+            MeshMaterial2d(color.clone()),
+            Transform::from_xyz(x, y, 1.0),
+            Falling { size },
+        ));
+    }
 }
 
 fn spawn_new_tetromino(
@@ -99,90 +90,67 @@ fn spawn_new_tetromino(
 struct TetrominoStopped;
 
 fn on_tetromino_stopped(
-    trigger: Trigger<TetrominoStopped>,
+    _trigger: Trigger<TetrominoStopped>,
     mut commands: Commands,
+    blocks: Query<(Entity, &Block), With<Falling>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut random: ResMut<Random>,
 ) {
-    let entity = trigger.entity();
+    let mut rows = HashSet::new();
+    for (entity, block) in blocks.iter() {
+        rows.insert(block.row());
+        commands.entity(entity).remove::<Falling>();
+    }
 
-    commands.entity(entity).remove::<Falling>();
-
-    commands.trigger(TetrominoReachedButtom);
+    commands.trigger(TetrominoReachedButtom { rows });
 
     spawn_tetromino(&mut commands, &mut meshes, &mut materials, &mut random);
 }
 
-pub fn tetromino_fall(
+pub fn on_countdown_tick(
     _trigger: Trigger<CountdownTick>,
     mut commands: Commands,
-    tetromino: Single<(Entity, &Tetromino, &Children), With<Falling>>,
-    mut blocks: Query<(&mut Transform, &mut Block)>,
+    mut blocks: Query<(&mut Transform, &mut Block), With<Falling>>,
     mut game_state: ResMut<GameState>,
 ) {
-    let (entity, _, children) = tetromino.into_inner();
-
     let mut reached_bottom = false;
 
-    for child in children.iter() {
-        let (_, block) = blocks.get_mut(*child).expect("Block entity doesn't found");
-        let row_idx = block.row() + 1;
-
-        if row_idx < VCELL_COUNT as usize {
-            let row_to_check = &game_state.rows[row_idx];
-
-            if !block.can_move(row_to_check) {
-                reached_bottom = true;
-            }
-        } else {
+    for (_, block) in blocks.iter() {
+        if !block.can_move_next_row(&game_state.rows) {
             reached_bottom = true;
         }
     }
 
     if !reached_bottom {
-        for child in children.iter() {
-            let (mut transform, mut block) =
-                blocks.get_mut(*child).expect("Block entity doesn't found");
-
-            let row_idx = block.row() + 1;
-            block.set_row(row_idx);
+        for (mut transform, mut block) in blocks.iter_mut() {
+            block.move_to_next_row();
             transform.translation.y = block.y();
         }
     } else {
-        for child in children.iter() {
-            let (_, block) = blocks.get_mut(*child).expect("Block entity doesn't found");
-
+        for (_, block) in blocks.iter() {
             game_state.set(&block);
         }
 
-        commands.trigger_targets(TetrominoStopped, entity);
+        commands.trigger(TetrominoStopped);
     }
 }
 
 fn handle_user_input(
-    tetromino: Single<(&Tetromino, &Children), With<Falling>>,
-    mut blocks: Query<(&mut Transform, &mut Block)>,
+    mut blocks: Query<(&mut Transform, &mut Block), With<Falling>>,
     key: Res<ButtonInput<KeyCode>>,
-    mut game_state: ResMut<GameState>,
+    game_state: Res<GameState>,
 ) {
-    let (_, children) = tetromino.into_inner();
-
-    if key.pressed(KeyCode::ArrowUp) {
-        game_state.speed += 3.0;
-    } else if key.pressed(KeyCode::ArrowDown) {
-        game_state.speed = (game_state.speed - 3.0).max(0.0);
-    }
-
     let mut can_move = true;
 
-    for child in children.iter() {
-        let (_, block) = blocks.get(*child).expect("Block entity doesn't found");
+    for (_, block) in blocks.iter() {
         let row = &game_state.rows[block.row()];
 
         if key.just_released(KeyCode::KeyA) && !block.can_move_left(row) {
             can_move = false;
         } else if key.just_pressed(KeyCode::KeyD) && !block.can_move_right(row) {
+            can_move = false;
+        } else if key.just_pressed(KeyCode::KeyS) && !block.can_move_next_row(&game_state.rows) {
             can_move = false;
         }
     }
@@ -191,44 +159,36 @@ fn handle_user_input(
         return;
     }
 
-    for child in children.iter() {
-        let (mut transform, mut block) =
-            blocks.get_mut(*child).expect("Block entity doesn't found");
-
+    for (mut transform, mut block) in blocks.iter_mut() {
         if key.just_released(KeyCode::KeyA) {
             block.move_left();
+            transform.translation.x = block.x();
         } else if key.just_pressed(KeyCode::KeyD) {
             block.move_right();
+            transform.translation.x = block.x();
+        } else if key.just_pressed(KeyCode::KeyS) {
+            block.move_to_next_row();
+            transform.translation.y = block.y();
         }
-
-        transform.translation.x = block.x();
     }
 }
 
 fn rotate_tetromino(
-    tetromino: Single<(&Tetromino, &Children), With<Falling>>,
-    mut blocks: Query<(&mut Transform, &mut Block)>,
+    mut blocks: Query<(&mut Transform, &mut Block, &Falling)>,
     key: Res<ButtonInput<KeyCode>>,
 ) {
-    let (tetromino, children) = tetromino.into_inner();
-
     if !key.just_pressed(KeyCode::KeyW) {
         return;
     }
 
-    let can_rotate = children
-        .iter()
-        .map(|child| blocks.get(*child).expect("Block entity doesn't found").1)
-        .all(|block| block.can_rotate(tetromino.size));
+    let can_rotate = blocks.iter().all(|(_, block, f)| block.can_rotate(f.size));
 
     if !can_rotate {
         return;
     }
 
-    for child in children.iter() {
-        let (mut transform, mut block) =
-            blocks.get_mut(*child).expect("Block entity doesn't found");
-        block.rotate(tetromino.size);
+    for (mut transform, mut block, falling) in blocks.iter_mut() {
+        block.rotate(falling.size);
 
         transform.translation.x = block.x();
         transform.translation.y = block.y();

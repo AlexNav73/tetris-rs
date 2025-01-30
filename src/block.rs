@@ -6,10 +6,10 @@ use crate::utils::*;
 
 pub fn line(column: usize) -> Vec<Block> {
     vec![
-        Block::new(0, column, 0, 0),
-        Block::new(0, column, 1, 0),
-        Block::new(0, column, 2, 0),
-        Block::new(0, column, 3, 0),
+        Block::new(0, column, 0, 1),
+        Block::new(0, column, 1, 1),
+        Block::new(0, column, 2, 1),
+        Block::new(0, column, 3, 1),
     ]
 }
 
@@ -52,8 +52,8 @@ impl Block {
         self.row + self.local_row
     }
 
-    pub fn set_row(&mut self, value: usize) {
-        self.row = value - self.local_row;
+    pub fn move_to_next_row(&mut self) {
+        self.row += 1;
     }
 
     pub fn column(&self) -> usize {
@@ -72,8 +72,14 @@ impl Block {
         }
     }
 
-    pub fn can_move(&self, row: &Row) -> bool {
-        row.can_move(self.column())
+    pub fn can_move_next_row(&self, rows: &[Row]) -> bool {
+        let row_idx = self.row() + 1;
+        if row_idx < VCELL_COUNT as usize {
+            let row = &rows[row_idx];
+            row.can_move(self.column())
+        } else {
+            false
+        }
     }
 
     pub fn can_move_left(&self, row: &Row) -> bool {
