@@ -48,6 +48,6 @@ fn handle_exit_key_pressed(
     mut app_exit_events: EventWriter<AppExit>,
 ) {
     if key.just_pressed(KeyCode::KeyQ) {
-        app_exit_events.send_default();
+        app_exit_events.write_default();
     }
 }

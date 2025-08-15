@@ -9,7 +9,7 @@ use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
-use bevy::utils::tracing::instrument;
+use bevy::log::tracing::instrument;
 
 pub struct GameStatePlugin;
 

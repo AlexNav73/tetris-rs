@@ -14,7 +14,7 @@ pub struct TetrominoPlugin;
 
 impl Plugin for TetrominoPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Random(ChaCha8Rng::from_entropy()))
+        app.insert_resource(Random(ChaCha8Rng::from_rng(&mut rand::rng())))
             .add_systems(Startup, spawn_new_tetromino)
             .add_systems(
                 RunFixedMainLoop,
@@ -44,7 +44,7 @@ fn create_square(column: usize) -> (usize, Vec<Block>) {
 }
 
 fn create_new_shape(random: &mut ChaCha8Rng, column: usize) -> (usize, Vec<Block>) {
-    let shape = random.gen_range(0..=1);
+    let shape = random.random_range(0..=1);
     match shape {
         0 => create_line(column),
         1 => create_square(column),
