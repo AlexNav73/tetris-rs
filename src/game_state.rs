@@ -55,7 +55,7 @@ impl Row {
         self.0 |= column_to_bit_mask(column);
     }
 
-    fn occupied(&self, column: usize) -> bool {
+    pub fn occupied(&self, column: usize) -> bool {
         self.0 & column_to_bit_mask(column) != 0
     }
 
@@ -68,6 +68,14 @@ impl Row {
         }
 
         true
+    }
+
+    fn clear(&mut self) {
+        self.0 = 0;
+    }
+
+    fn copy(&mut self, other: &Row) {
+        self.0 = other.0;
     }
 }
 
@@ -94,10 +102,12 @@ impl GameState {
     }
 
     fn clear_row(&mut self, row: usize) {
-        self.rows[row].0 = 0;
+        self.rows[row].clear();
 
         for current_row in (1..=row).rev() {
-            self.rows[current_row].0 = self.rows[current_row - 1].0;
+            let (prev_rows, next_rows) = self.rows.split_at_mut(current_row);
+            let prev_row = prev_rows.last().unwrap();
+            next_rows[0].copy(prev_row);
         }
     }
 }

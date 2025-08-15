@@ -60,18 +60,6 @@ impl Block {
         self.column + self.local_column
     }
 
-    pub fn set_column(&mut self, value: usize) {
-        if let Some(column) = value.checked_sub(self.local_column) {
-            self.column = column;
-        } else {
-            self.column = 0;
-            self.local_column = self
-                .local_column
-                .checked_sub(self.local_column - value)
-                .unwrap_or(0);
-        }
-    }
-
     pub fn can_move_next_row(&self, rows: &[Row]) -> bool {
         let row_idx = self.row() + 1;
         if row_idx < VCELL_COUNT as usize {
@@ -100,12 +88,13 @@ impl Block {
         self.set_column(self.column() + 1);
     }
 
-    pub fn can_rotate(&self, size: usize) -> bool {
+    pub fn can_rotate(&self, size: usize, rows: &[Row]) -> bool {
         let local_row = self.local_column;
         let local_column = size - self.local_row - 1;
 
         return self.column + local_column < HCELL_COUNT as usize
-            && self.row + local_row < VCELL_COUNT as usize;
+            && self.row + local_row < VCELL_COUNT as usize
+            && !rows[self.row + local_row].occupied(self.column + local_column);
     }
 
     pub fn rotate(&mut self, size: usize) {
@@ -117,8 +106,20 @@ impl Block {
     }
 
     pub fn set(&self, rows: &mut [Row]) {
-        let field_row = &mut rows[self.row()];
+        let row = &mut rows[self.row()];
 
-        field_row.set(self.column());
+        row.set(self.column());
+    }
+
+    fn set_column(&mut self, value: usize) {
+        if let Some(column) = value.checked_sub(self.local_column) {
+            self.column = column;
+        } else {
+            self.column = 0;
+            self.local_column = self
+                .local_column
+                .checked_sub(self.local_column - value)
+                .unwrap_or(0);
+        }
     }
 }

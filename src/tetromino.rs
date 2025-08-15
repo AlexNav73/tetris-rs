@@ -176,12 +176,15 @@ fn handle_user_input(
 fn rotate_tetromino(
     mut blocks: Query<(&mut Transform, &mut Block, &Falling)>,
     key: Res<ButtonInput<KeyCode>>,
+    game_state: Res<GameState>
 ) {
     if !key.just_pressed(KeyCode::KeyW) {
         return;
     }
 
-    let can_rotate = blocks.iter().all(|(_, block, f)| block.can_rotate(f.size));
+    let can_rotate = blocks.iter().all(|(_, block, f)| {
+        block.can_rotate(f.size, &game_state.rows)
+    });
 
     if !can_rotate {
         return;
