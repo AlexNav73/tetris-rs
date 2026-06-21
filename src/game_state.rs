@@ -5,6 +5,7 @@ use crate::constants::*;
 use crate::events::*;
 use crate::scene::*;
 use crate::tetromino::*;
+use crate::countdown::Countdown;
 use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
@@ -117,6 +118,7 @@ fn on_tetromino_reached_bottom(
     tetromino_reached_bottom: On<TetrominoReachedButtom>,
     mut commands: Commands,
     mut game_state: ResMut<GameState>,
+    mut countdown: ResMut<Countdown>,
     mut blocks: Query<(Entity, &mut Block, &mut Transform), Without<Falling>>,
 ) {
     let event = tetromino_reached_bottom.event();
@@ -148,6 +150,8 @@ fn on_tetromino_reached_bottom(
         info!("clearing completed row: {idx}");
         game_state.clear_row(idx);
     }
+
+    countdown.speed_up();
 }
 
 fn show_tetromino_debug_view(

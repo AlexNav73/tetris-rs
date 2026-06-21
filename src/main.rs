@@ -11,7 +11,7 @@ mod utils;
 use crate::countdown::CountdownPlugin;
 use crate::game_state::GameStatePlugin;
 use crate::tetromino::TetrominoPlugin;
-use crate::ui::UIPlugin;
+use crate::ui::{UIPlugin, speed_text_box};
 
 use bevy::prelude::*;
 
@@ -30,17 +30,19 @@ fn main() {
         .add_plugins(CountdownPlugin)
         .add_plugins(UIPlugin)
         .add_plugins(GameStatePlugin)
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, setup_ui.spawn()))
         .add_systems(Update, handle_exit_key_pressed)
         .run();
 }
 
-fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
-    commands.spawn(Camera2d);
-
+fn setup(mut config_store: ResMut<GizmoConfigStore>) {
     let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
 
     config.depth_bias = -1.0;
+}
+
+fn setup_ui() -> impl SceneList {
+    bsn_list![Camera2d, speed_text_box()]
 }
 
 fn handle_exit_key_pressed(
