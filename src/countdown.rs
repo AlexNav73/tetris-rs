@@ -17,7 +17,7 @@ impl Plugin for CountdownPlugin {
         app.init_resource::<Countdown>()
             .add_systems(
                 Update,
-                countdown.run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
+                countdown.run_if(in_state(GameScene::Game).or_else(in_state(GameScene::DebugView))),
             )
             .add_observer(on_tetromino_reached_bottom);
     }
@@ -31,15 +31,15 @@ impl Default for Countdown {
     }
 }
 
-fn countdown(mut commands: Commands, mut timer: ResMut<Countdown>, time: Res<Time>) {
-    timer.timer.tick(time.delta());
-    if timer.timer.just_finished() {
+fn countdown(mut commands: Commands, mut countdown: ResMut<Countdown>, time: Res<Time>) {
+    countdown.timer.tick(time.delta());
+    if countdown.timer.just_finished() {
         commands.trigger(CountdownTick);
     }
 }
 
 fn on_tetromino_reached_bottom(
-    _trigger: Trigger<TetrominoReachedButtom>,
+    _trigger: On<TetrominoReachedButtom>,
     mut countdown: ResMut<Countdown>,
 ) {
     let duration = countdown.timer.duration().as_secs_f32();

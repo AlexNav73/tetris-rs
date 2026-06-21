@@ -7,7 +7,7 @@ use crate::game_state::GameState;
 use crate::scene::GameScene;
 
 use bevy::prelude::*;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub struct TetrominoPlugin;
@@ -19,8 +19,8 @@ impl Plugin for TetrominoPlugin {
             .add_systems(
                 RunFixedMainLoop,
                 (handle_user_input, rotate_tetromino)
-                    .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView)))
-                    .in_set(RunFixedMainLoopSystem::BeforeFixedMainLoop),
+                    .run_if(in_state(GameScene::Game).or_else(in_state(GameScene::DebugView)))
+                    .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
             )
             .add_observer(on_countdown_tick)
             .add_observer(on_tetromino_stopped);
@@ -90,7 +90,7 @@ fn spawn_new_tetromino(
 struct TetrominoStopped;
 
 fn on_tetromino_stopped(
-    _trigger: Trigger<TetrominoStopped>,
+    _tetromino_stopped: On<TetrominoStopped>,
     mut commands: Commands,
     blocks: Query<(Entity, &Block), With<Falling>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -109,7 +109,7 @@ fn on_tetromino_stopped(
 }
 
 pub fn on_countdown_tick(
-    _trigger: Trigger<CountdownTick>,
+    _tick: On<CountdownTick>,
     mut commands: Commands,
     mut blocks: Query<(&mut Transform, &mut Block), With<Falling>>,
     mut game_state: ResMut<GameState>,

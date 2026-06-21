@@ -19,7 +19,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                resolution: [400.0, 600.0].into(),
+                resolution: [400, 600].into(),
                 position: WindowPosition::Centered(MonitorSelection::Primary),
                 title: "Tetris".into(),
                 ..default()
@@ -45,9 +45,9 @@ fn setup(mut commands: Commands, mut config_store: ResMut<GizmoConfigStore>) {
 
 fn handle_exit_key_pressed(
     key: Res<ButtonInput<KeyCode>>,
-    mut app_exit_events: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     if key.just_pressed(KeyCode::KeyQ) {
-        app_exit_events.write_default();
+        exit.write(AppExit::Success);
     }
 }

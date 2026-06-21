@@ -17,9 +17,9 @@ pub struct SpeedCounter;
 fn setup_ui(mut commands: Commands) {
     commands
         .spawn((
-            Text::from("Speed: "),
+            Text::new("Speed: "),
             TextFont {
-                font_size: 24.0,
+                font_size: 24.0.into(),
                 ..Default::default()
             },
             TextColor::WHITE,
@@ -28,7 +28,7 @@ fn setup_ui(mut commands: Commands) {
             parent.spawn((
                 TextSpan::default(),
                 TextFont {
-                    font_size: 24.0,
+                    font_size: 24.0.into(),
                     ..Default::default()
                 },
                 TextColor::WHITE,

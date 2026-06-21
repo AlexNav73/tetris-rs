@@ -9,7 +9,6 @@ use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
-use bevy::log::tracing::instrument;
 
 pub struct GameStatePlugin;
 
@@ -21,15 +20,17 @@ impl Plugin for GameStatePlugin {
             .add_systems(
                 Update,
                 (
-                    toggle_debug_view
-                        .run_if(in_state(GameScene::Game).or(in_state(GameScene::DebugView))),
+                    toggle_debug_view.run_if(
+                        in_state(GameScene::Game)
+                            .or_else(in_state(GameScene::DebugView))
+                            .or_else(in_state(GameScene::Pause))),
                     pause.run_if(
                         in_state(GameScene::Game)
-                            .or(in_state(GameScene::DebugView))
-                            .or(in_state(GameScene::Pause)),
+                            .or_else(in_state(GameScene::DebugView))
+                            .or_else(in_state(GameScene::Pause)),
                     ),
                     show_tetromino_debug_view
-                        .after(on_countdown_tick)
+                        //.after(on_countdown_tick) TODO: uncomment this line
                         .run_if(in_state(GameScene::DebugView)),
                 ),
             )
@@ -112,14 +113,13 @@ impl GameState {
     }
 }
 
-#[instrument(skip_all)]
 fn on_tetromino_reached_bottom(
-    trigger: Trigger<TetrominoReachedButtom>,
+    tetromino_reached_bottom: On<TetrominoReachedButtom>,
     mut commands: Commands,
     mut game_state: ResMut<GameState>,
     mut blocks: Query<(Entity, &mut Block, &mut Transform), Without<Falling>>,
 ) {
-    let event = trigger.event();
+    let event = tetromino_reached_bottom.event();
 
     for idx in event.rows.iter().copied() {
         let row = &mut game_state.rows[idx];
