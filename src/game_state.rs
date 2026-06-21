@@ -120,8 +120,16 @@ fn on_tetromino_reached_bottom(
     mut blocks: Query<(Entity, &mut Block, &mut Transform), Without<Falling>>,
 ) {
     let event = tetromino_reached_bottom.event();
+    let mut row_idxs = event.rows.iter().copied().collect::<Vec<_>>();
 
-    for idx in event.rows.iter().copied() {
+    // Rows must be sorted in the ASC order because when we
+    // removing finished rows the rows above must fall down.
+    // This will invalidate idx-s of other rows. Therefore, we
+    // should start removal of the rows from the topmost and
+    // go down.
+    row_idxs.sort();
+
+    for idx in row_idxs.into_iter() {
         let row = &mut game_state.rows[idx];
 
         if !row.is_finished() {
@@ -137,7 +145,7 @@ fn on_tetromino_reached_bottom(
             }
         }
 
-        info!("clearing completed row");
+        info!("clearing completed row: {idx}");
         game_state.clear_row(idx);
     }
 }
