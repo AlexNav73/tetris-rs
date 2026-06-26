@@ -1,55 +1,35 @@
 use std::collections::HashSet;
 
+use crate::shapes::*;
 use crate::block::*;
 use crate::constants::*;
 use crate::events::*;
 use crate::game_state::GameState;
-use crate::scene::GameScene;
+use crate::scenes::GameScene;
 
 use bevy::prelude::*;
-use rand::{RngExt, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-pub struct TetrominoPlugin;
-
-impl Plugin for TetrominoPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(Random(ChaCha8Rng::from_rng(&mut rand::rng())))
-            .add_systems(Startup, spawn_new_tetromino)
-            .add_systems(
-                RunFixedMainLoop,
-                (handle_user_input, rotate_tetromino)
-                    .run_if(in_state(GameScene::Game).or_else(in_state(GameScene::DebugView)))
-                    .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
-            )
-            .add_observer(on_countdown_tick)
-            .add_observer(on_tetromino_stopped);
-    }
+pub fn plugin(app: &mut App) {
+    app.insert_resource(Random(ChaCha8Rng::from_rng(&mut rand::rng())))
+        .add_systems(Startup, spawn_new_tetromino)
+        .add_systems(
+            RunFixedMainLoop,
+            (handle_user_input, rotate_tetromino)
+                .run_if(in_state(GameScene::Playing).or_else(in_state(GameScene::DebugView)))
+                .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+        )
+        .add_observer(on_countdown_tick)
+        .add_observer(on_tetromino_stopped);
 }
 
 #[derive(Resource)]
 struct Random(ChaCha8Rng);
 
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 pub struct Falling {
     size: usize,
-}
-
-fn create_line(column: usize) -> (usize, Vec<Block>) {
-    (4, line(column))
-}
-
-fn create_square(column: usize) -> (usize, Vec<Block>) {
-    (2, square(column))
-}
-
-fn create_new_shape(random: &mut ChaCha8Rng, column: usize) -> (usize, Vec<Block>) {
-    let shape = random.random_range(0..=1);
-    match shape {
-        0 => create_line(column),
-        1 => create_square(column),
-        _ => unimplemented!("Shape is not supported: {}", shape),
-    }
 }
 
 fn spawn_tetromino(

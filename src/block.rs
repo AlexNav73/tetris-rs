@@ -4,25 +4,7 @@ use crate::constants::*;
 use crate::game_state::*;
 use crate::utils::*;
 
-pub fn line(column: usize) -> Vec<Block> {
-    vec![
-        Block::new(0, column, 0, 1),
-        Block::new(0, column, 1, 1),
-        Block::new(0, column, 2, 1),
-        Block::new(0, column, 3, 1),
-    ]
-}
-
-pub fn square(column: usize) -> Vec<Block> {
-    vec![
-        Block::new(0, column, 0, 0),
-        Block::new(0, column, 0, 1),
-        Block::new(0, column, 1, 0),
-        Block::new(0, column, 1, 1),
-    ]
-}
-
-#[derive(Component)]
+#[derive(Component, Copy, Clone)]
 pub struct Block {
     local_row: usize,
     local_column: usize,

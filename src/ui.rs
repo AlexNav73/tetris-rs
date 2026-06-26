@@ -1,19 +1,16 @@
 use bevy::prelude::*;
 
-use crate::countdown::Countdown;
+use crate::{countdown::Countdown, scenes::GameScene};
 
-pub struct UIPlugin;
-
-impl Plugin for UIPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, draw_ui);
-    }
+pub fn plugin(app: &mut App) {
+    app.add_systems(OnEnter(GameScene::Playing), speed_text_box.spawn());
+    app.add_systems(Update, draw_ui);
 }
 
 #[derive(Default, Clone, Component)]
 pub struct SpeedCounter;
 
-pub fn speed_text_box() -> impl Scene {
+fn speed_text_box() -> impl Scene {
     bsn! {
         Text::new("Speed: ")
         TextFont { font_size: FontSize::Px(24.0) }

@@ -3,7 +3,15 @@ use std::time::Duration;
 use bevy::prelude::*;
 
 use crate::events::CountdownTick;
-use crate::scene::GameScene;
+use crate::scenes::GameScene;
+
+pub fn plugin(app: &mut App) {
+    app.init_resource::<Countdown>()
+        .add_systems(
+            Update,
+            countdown.run_if(in_state(GameScene::Playing).or_else(in_state(GameScene::DebugView))),
+        );
+}
 
 #[derive(Resource)]
 pub struct Countdown {
@@ -21,17 +29,6 @@ impl Countdown {
     }
 }
 
-pub struct CountdownPlugin;
-
-impl Plugin for CountdownPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<Countdown>()
-            .add_systems(
-                Update,
-                countdown.run_if(in_state(GameScene::Game).or_else(in_state(GameScene::DebugView))),
-            );
-    }
-}
 
 impl Default for Countdown {
     fn default() -> Self {

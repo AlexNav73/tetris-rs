@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter, Result as FResult};
 use crate::block::Block;
 use crate::constants::*;
 use crate::events::*;
-use crate::scene::*;
+use crate::scenes::*;
 use crate::tetromino::*;
 use crate::countdown::Countdown;
 use crate::utils::column_to_bit_mask;
@@ -11,32 +11,13 @@ use crate::utils::column_to_bit_mask;
 use bevy::color::palettes::css::*;
 use bevy::prelude::*;
 
-pub struct GameStatePlugin;
-
-impl Plugin for GameStatePlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<GameState>()
-            .init_state::<GameScene>()
-            .add_systems(Startup, show_field)
-            .add_systems(
-                Update,
-                (
-                    toggle_debug_view.run_if(
-                        in_state(GameScene::Game)
-                            .or_else(in_state(GameScene::DebugView))
-                            .or_else(in_state(GameScene::Pause))),
-                    pause.run_if(
-                        in_state(GameScene::Game)
-                            .or_else(in_state(GameScene::DebugView))
-                            .or_else(in_state(GameScene::Pause)),
-                    ),
-                    show_tetromino_debug_view
-                        //.after(on_countdown_tick) TODO: uncomment this line
-                        .run_if(in_state(GameScene::DebugView)),
-                ),
-            )
-            .add_observer(on_tetromino_reached_bottom);
-    }
+pub fn plugin(app: &mut App) {
+    app.init_resource::<GameState>()
+        .add_systems(OnEnter(GameScene::Playing), show_field)
+        .add_systems(Update, show_tetromino_debug_view
+            //.after(on_countdown_tick) TODO: uncomment this line
+            .run_if(in_state(GameScene::DebugView)))
+        .add_observer(on_tetromino_reached_bottom);
 }
 
 #[derive(Default)]

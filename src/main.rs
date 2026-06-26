@@ -3,15 +3,17 @@ mod constants;
 mod countdown;
 mod events;
 mod game_state;
-mod scene;
+mod scenes;
 mod tetromino;
 mod ui;
 mod utils;
+mod shapes;
 
-use crate::countdown::CountdownPlugin;
-use crate::game_state::GameStatePlugin;
-use crate::tetromino::TetrominoPlugin;
-use crate::ui::{UIPlugin, speed_text_box};
+use crate::countdown::plugin as countdown_plugin;
+use crate::game_state::plugin as game_state_plugin;
+use crate::tetromino::plugin as tetromino_plugin;
+use crate::ui::plugin as ui_plugin;
+use crate::scenes::plugin as scene_plugin;
 
 use bevy::prelude::*;
 
@@ -26,10 +28,11 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(TetrominoPlugin)
-        .add_plugins(CountdownPlugin)
-        .add_plugins(UIPlugin)
-        .add_plugins(GameStatePlugin)
+        .add_plugins(tetromino_plugin)
+        .add_plugins(countdown_plugin)
+        .add_plugins(ui_plugin)
+        .add_plugins(game_state_plugin)
+        .add_plugins(scene_plugin)
         .add_systems(Startup, (setup, setup_ui.spawn()))
         .add_systems(Update, handle_exit_key_pressed)
         .run();
@@ -42,7 +45,7 @@ fn setup(mut config_store: ResMut<GizmoConfigStore>) {
 }
 
 fn setup_ui() -> impl SceneList {
-    bsn_list![Camera2d, speed_text_box()]
+    bsn_list![Camera2d]
 }
 
 fn handle_exit_key_pressed(
