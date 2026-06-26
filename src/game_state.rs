@@ -2,10 +2,10 @@ use std::fmt::{Debug, Formatter, Result as FResult};
 
 use crate::block::Block;
 use crate::constants::*;
+use crate::countdown::Countdown;
 use crate::events::*;
 use crate::scenes::*;
 use crate::tetromino::*;
-use crate::countdown::Countdown;
 use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
@@ -13,10 +13,13 @@ use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<GameState>()
-        .add_systems(OnEnter(GameScene::Playing), show_field)
-        .add_systems(Update, show_tetromino_debug_view
-            //.after(on_countdown_tick) TODO: uncomment this line
-            .run_if(in_state(GameScene::DebugView)))
+        .add_systems(OnEnter(GameScene::Playing), show_well.spawn())
+        .add_systems(
+            Update,
+            show_tetromino_debug_view
+                //.after(on_countdown_tick) TODO: uncomment this line
+                .run_if(in_state(GameScene::DebugView)),
+        )
         .add_observer(on_tetromino_reached_bottom);
 }
 
@@ -173,48 +176,44 @@ fn show_tetromino_debug_view(
     }
 }
 
-fn show_field(
-    mut commans: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn show_well() -> impl SceneList {
     let h_dist_from_center = FIELD_WIDTH / 2.0;
     let v_dist_from_center = (VCELL_COUNT / 2.0).ceil() * CELL_SIZE;
     let border_center = BORDER_SIZE / 2.0;
 
-    let vertical = meshes.add(Rectangle::new(BORDER_SIZE, FIELD_HEIGHT));
-    let horizontal = meshes.add(Rectangle::new(
-        FIELD_WIDTH + (BORDER_SIZE * 2.0),
-        BORDER_SIZE,
-    ));
-    let color = materials.add(Color::WHITE);
-
-    // left
-    commans.spawn((
-        Mesh2d(vertical.clone()),
-        MeshMaterial2d(color.clone()),
-        Transform::from_xyz(-h_dist_from_center - border_center, CELL_CENTER, 0.0),
-    ));
-    // right
-    commans.spawn((
-        Mesh2d(vertical.clone()),
-        MeshMaterial2d(color.clone()),
-        Transform::from_xyz(h_dist_from_center + border_center, CELL_CENTER, 0.0),
-    ));
-    // top
-    commans.spawn((
-        Mesh2d(horizontal.clone()),
-        MeshMaterial2d(color.clone()),
-        Transform::from_xyz(0.0, v_dist_from_center + border_center, 0.0),
-    ));
-    // bottom
-    commans.spawn((
-        Mesh2d(horizontal),
-        MeshMaterial2d(color),
-        Transform::from_xyz(
-            0.0,
-            -(FIELD_HEIGHT - v_dist_from_center) - border_center,
-            0.0,
+    bsn_list![
+        // left
+        (
+            wall(BORDER_SIZE, FIELD_HEIGHT)
+            Transform::from_xyz(-h_dist_from_center - border_center, CELL_CENTER, 0.0)
         ),
-    ));
+        // right
+        (
+            wall(BORDER_SIZE, FIELD_HEIGHT)
+            Transform::from_xyz(h_dist_from_center + border_center, CELL_CENTER, 0.0)
+        ),
+        // top
+        (
+            wall(FIELD_WIDTH + (BORDER_SIZE * 2.0), BORDER_SIZE)
+            Transform::from_xyz(0.0, v_dist_from_center + border_center, 0.0)
+        ),
+        // bottom
+        (
+            wall(FIELD_WIDTH + (BORDER_SIZE * 2.0), BORDER_SIZE)
+            Transform::from_xyz(
+                0.0,
+                -(FIELD_HEIGHT - v_dist_from_center) - border_center,
+                0.0,
+            )
+        )
+    ]
+}
+
+fn wall(width: f32, height: f32) -> impl Scene {
+    bsn! {
+        Sprite {
+            color: Color::WHITE,
+            custom_size: Vec2::new(width, height)
+        }
+    }
 }

@@ -1,21 +1,21 @@
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.init_state::<GameScene>()
-        .add_systems(
-            Update,
-            (
-                toggle_debug_view.run_if(
-                    in_state(GameScene::Playing)
-                        .or_else(in_state(GameScene::DebugView))
-                        .or_else(in_state(GameScene::Pause))),
-                pause.run_if(
-                    in_state(GameScene::Playing)
-                        .or_else(in_state(GameScene::DebugView))
-                        .or_else(in_state(GameScene::Pause)),
-                )
+    app.init_state::<GameScene>().add_systems(
+        Update,
+        (
+            toggle_debug_view.run_if(
+                in_state(GameScene::Playing)
+                    .or_else(in_state(GameScene::DebugView))
+                    .or_else(in_state(GameScene::Pause)),
             ),
-        );
+            pause.run_if(
+                in_state(GameScene::Playing)
+                    .or_else(in_state(GameScene::DebugView))
+                    .or_else(in_state(GameScene::Pause)),
+            ),
+        ),
+    );
 }
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]

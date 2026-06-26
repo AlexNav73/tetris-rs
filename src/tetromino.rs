@@ -1,19 +1,17 @@
 use std::collections::HashSet;
 
-use crate::shapes::*;
 use crate::block::*;
-use crate::constants::*;
 use crate::events::*;
 use crate::game_state::GameState;
 use crate::scenes::GameScene;
 
 use bevy::prelude::*;
-use rand::SeedableRng;
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(Random(ChaCha8Rng::from_rng(&mut rand::rng())))
-        .add_systems(Startup, spawn_new_tetromino)
+        .add_systems(OnEnter(GameScene::Playing), spawn_tetromino)
         .add_systems(
             RunFixedMainLoop,
             (handle_user_input, rotate_tetromino)
@@ -27,43 +25,16 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource)]
 struct Random(ChaCha8Rng);
 
-#[derive(Component, Default, Clone)]
+#[derive(Component, Debug, Default, Clone)]
 pub struct Falling {
     size: usize,
 }
 
 fn spawn_tetromino(
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-    random: &mut Random,
-) {
-    let rect = meshes.add(Rectangle::new(CELL_SIZE, CELL_SIZE));
-    let color = materials.add(Color::srgb(1.0, 0.0, 0.0));
-
-    let (size, blocks) = create_new_shape(&mut random.0, 5);
-
-    for block in blocks {
-        let x = block.x();
-        let y = block.y();
-
-        commands.spawn((
-            block,
-            Mesh2d(rect.clone()),
-            MeshMaterial2d(color.clone()),
-            Transform::from_xyz(x, y, 1.0),
-            Falling { size },
-        ));
-    }
-}
-
-fn spawn_new_tetromino(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut random: ResMut<Random>,
+    mut random: ResMut<Random>
 ) {
-    spawn_tetromino(&mut commands, &mut meshes, &mut materials, &mut random);
+    commands.spawn_scene_list(create_new_shape(&mut random.0, 5));
 }
 
 #[derive(Event)]
@@ -73,9 +44,7 @@ fn on_tetromino_stopped(
     _tetromino_stopped: On<TetrominoStopped>,
     mut commands: Commands,
     blocks: Query<(Entity, &Block), With<Falling>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut random: ResMut<Random>,
+    random: ResMut<Random>,
 ) {
     let mut rows = HashSet::new();
     for (entity, block) in blocks.iter() {
@@ -85,7 +54,7 @@ fn on_tetromino_stopped(
 
     commands.trigger(TetrominoReachedButtom { rows });
 
-    spawn_tetromino(&mut commands, &mut meshes, &mut materials, &mut random);
+    spawn_tetromino(commands, random);
 }
 
 pub fn on_countdown_tick(
@@ -156,15 +125,15 @@ fn handle_user_input(
 fn rotate_tetromino(
     mut blocks: Query<(&mut Transform, &mut Block, &Falling)>,
     key: Res<ButtonInput<KeyCode>>,
-    game_state: Res<GameState>
+    game_state: Res<GameState>,
 ) {
     if !key.just_pressed(KeyCode::KeyW) {
         return;
     }
 
-    let can_rotate = blocks.iter().all(|(_, block, f)| {
-        block.can_rotate(f.size, &game_state.rows)
-    });
+    let can_rotate = blocks
+        .iter()
+        .all(|(_, block, f)| block.can_rotate(f.size, &game_state.rows));
 
     if !can_rotate {
         return;
@@ -176,4 +145,31 @@ fn rotate_tetromino(
         transform.translation.x = block.x();
         transform.translation.y = block.y();
     }
+}
+
+fn create_new_shape(random: &mut ChaCha8Rng, column: usize) -> Box<dyn SceneList> {
+    let shape = random.random_range(0..=1);
+    match shape {
+        0 => Box::new(line(column)),
+        1 => Box::new(square(column)),
+        _ => unimplemented!("Shape is not supported: {}", shape),
+    }
+}
+
+fn line(column: usize) -> impl SceneList {
+    bsn_list![
+        (block_sprite(column, 0, 1) Falling { size: 4 }),
+        (block_sprite(column, 1, 1) Falling { size: 4 }),
+        (block_sprite(column, 2, 1) Falling { size: 4 }),
+        (block_sprite(column, 3, 1) Falling { size: 4 }),
+    ]
+}
+
+fn square(column: usize) -> impl SceneList {
+    bsn_list![
+        (block_sprite(column, 0, 0) Falling { size: 2 }),
+        (block_sprite(column, 0, 1) Falling { size: 2 }),
+        (block_sprite(column, 1, 0) Falling { size: 2 }),
+        (block_sprite(column, 1, 1) Falling { size: 2 }),
+    ]
 }

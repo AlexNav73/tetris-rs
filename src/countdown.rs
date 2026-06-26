@@ -6,11 +6,10 @@ use crate::events::CountdownTick;
 use crate::scenes::GameScene;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Countdown>()
-        .add_systems(
-            Update,
-            countdown.run_if(in_state(GameScene::Playing).or_else(in_state(GameScene::DebugView))),
-        );
+    app.init_resource::<Countdown>().add_systems(
+        Update,
+        countdown.run_if(in_state(GameScene::Playing).or_else(in_state(GameScene::DebugView))),
+    );
 }
 
 #[derive(Resource)]
@@ -28,7 +27,6 @@ impl Countdown {
         }
     }
 }
-
 
 impl Default for Countdown {
     fn default() -> Self {

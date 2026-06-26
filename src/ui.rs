@@ -26,10 +26,7 @@ fn speed_text_box() -> impl Scene {
     }
 }
 
-fn draw_ui(
-    text: Single<&mut TextSpan, With<SpeedCounter>>,
-    countdown: Res<Countdown>
-) {
+fn draw_ui(text: Single<&mut TextSpan, With<SpeedCounter>>, countdown: Res<Countdown>) {
     let mut text_span = text.into_inner();
     **text_span = format!("{}", countdown.timer.duration().as_secs_f32());
 }

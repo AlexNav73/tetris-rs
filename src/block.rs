@@ -4,7 +4,7 @@ use crate::constants::*;
 use crate::game_state::*;
 use crate::utils::*;
 
-#[derive(Component, Copy, Clone)]
+#[derive(Component, Default, Copy, Clone)]
 pub struct Block {
     local_row: usize,
     local_column: usize,
@@ -13,9 +13,9 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(row: usize, column: usize, local_row: usize, local_column: usize) -> Self {
+    pub fn new(column: usize, local_row: usize, local_column: usize) -> Self {
         Self {
-            row,
+            row: 0,
             column,
             local_row,
             local_column,
@@ -105,3 +105,21 @@ impl Block {
         }
     }
 }
+
+pub fn block_sprite(
+    column: usize,
+    local_row: usize,
+    local_column: usize,
+) -> impl Scene {
+    let block = Block::new(column, local_row, local_column);
+
+    bsn! {
+        Block { row: 0, column, local_column, local_row }
+        Sprite {
+            color: Color::srgb(1.0, 0.0, 0.0),
+            custom_size: Vec2::new(CELL_SIZE, CELL_SIZE)
+        }
+        Transform::from_xyz(block.x(), block.y(), 1.0)
+    }
+}
+

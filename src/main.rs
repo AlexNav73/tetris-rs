@@ -7,13 +7,12 @@ mod scenes;
 mod tetromino;
 mod ui;
 mod utils;
-mod shapes;
 
 use crate::countdown::plugin as countdown_plugin;
 use crate::game_state::plugin as game_state_plugin;
+use crate::scenes::plugin as scene_plugin;
 use crate::tetromino::plugin as tetromino_plugin;
 use crate::ui::plugin as ui_plugin;
-use crate::scenes::plugin as scene_plugin;
 
 use bevy::prelude::*;
 
@@ -48,10 +47,7 @@ fn setup_ui() -> impl SceneList {
     bsn_list![Camera2d]
 }
 
-fn handle_exit_key_pressed(
-    key: Res<ButtonInput<KeyCode>>,
-    mut exit: MessageWriter<AppExit>,
-) {
+fn handle_exit_key_pressed(key: Res<ButtonInput<KeyCode>>, mut exit: MessageWriter<AppExit>) {
     if key.just_pressed(KeyCode::KeyQ) {
         exit.write(AppExit::Success);
     }
