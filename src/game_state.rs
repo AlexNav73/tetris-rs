@@ -6,6 +6,7 @@ use crate::countdown::Countdown;
 use crate::events::*;
 use crate::scenes::*;
 use crate::tetromino::*;
+use crate::ui::*;
 use crate::utils::column_to_bit_mask;
 
 use bevy::color::palettes::css::*;
@@ -103,10 +104,12 @@ fn on_tetromino_reached_bottom(
     mut commands: Commands,
     mut game_state: ResMut<GameState>,
     mut countdown: ResMut<Countdown>,
+    mut speed: ResMut<Speed>,
     mut blocks: Query<(Entity, &mut Block, &mut Transform), Without<Falling>>,
 ) {
     let event = tetromino_reached_bottom.event();
     let mut row_idxs = event.rows.iter().copied().collect::<Vec<_>>();
+    let mut row_finished = false;
 
     // Rows must be sorted in the ASC order because when we
     // removing finished rows the rows above must fall down.
@@ -131,11 +134,14 @@ fn on_tetromino_reached_bottom(
             }
         }
 
-        info!("clearing completed row: {idx}");
+        debug!("clearing completed row: {idx}");
         game_state.clear_row(idx);
+        row_finished = true;
     }
 
-    countdown.speed_up();
+    if row_finished {
+        speed.0 = countdown.speed_up();
+    }
 }
 
 fn show_tetromino_debug_view(

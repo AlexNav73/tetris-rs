@@ -1,32 +1,29 @@
 use bevy::prelude::*;
 
-use crate::{countdown::Countdown, scenes::GameScene};
+use crate::scenes::GameScene;
 
 pub fn plugin(app: &mut App) {
+    app.insert_resource(Speed(0.7));
     app.add_systems(OnEnter(GameScene::Playing), speed_text_box.spawn());
     app.add_systems(Update, draw_ui);
 }
 
-#[derive(Default, Clone, Component)]
-pub struct SpeedCounter;
+#[derive(Resource, Default, Clone)]
+pub struct Speed(pub f32);
+
+#[derive(Component, Debug, Default, Clone)]
+struct SpeedText;
 
 fn speed_text_box() -> impl Scene {
     bsn! {
-        Text::new("Speed: ")
+        Text::new("Speed: 0.7")
         TextFont { font_size: FontSize::Px(24.0) }
-        TextColor::WHITE
-        Children [
-            (
-                TextSpan::default()
-                TextFont { font_size: FontSize::Px(24.0) }
-                TextColor::WHITE
-                SpeedCounter
-            )
-        ]
+        TextColor(Color::WHITE)
+        SpeedText
     }
 }
 
-fn draw_ui(text: Single<&mut TextSpan, With<SpeedCounter>>, countdown: Res<Countdown>) {
+fn draw_ui(speed: Res<Speed>, text: Single<&mut Text, With<SpeedText>>) {
     let mut text_span = text.into_inner();
-    **text_span = format!("{}", countdown.timer.duration().as_secs_f32());
+    **text_span = format!("Speed: {}", speed.0);
 }

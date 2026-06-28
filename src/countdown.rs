@@ -6,9 +6,12 @@ use crate::events::CountdownTick;
 use crate::scenes::GameScene;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Countdown>().add_systems(
+    app.init_resource::<Countdown>();
+    app.add_systems(
         Update,
-        countdown.run_if(in_state(GameScene::Playing).or_else(in_state(GameScene::DebugView))),
+        countdown
+            .run_if(in_state(GameScene::Playing)
+                .or_else(in_state(GameScene::DebugView))),
     );
 }
 
@@ -18,13 +21,11 @@ pub struct Countdown {
 }
 
 impl Countdown {
-    pub fn speed_up(&mut self) {
+    pub fn speed_up(&mut self) -> f32 {
         let duration = self.timer.duration().as_secs_f32();
-        let new_duration = duration - (duration * 0.10);
-        if new_duration > 0.10 {
-            self.timer
-                .set_duration(Duration::from_secs_f32(new_duration));
-        }
+        let new_duration = (duration - (duration * 0.10)).max(0.1);
+        self.timer.set_duration(Duration::from_secs_f32(new_duration));
+        new_duration
     }
 }
 
